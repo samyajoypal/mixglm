@@ -1,0 +1,6 @@
+dataset,best_bic_families,best_bic_init,best_bic_lambda,best_bic,best_bic_nonidentical,best_loglik_families,best_loglik_init,best_loglik_lambda,best_test_loglik,best_loglik_nonidentical,best_rmse_families,best_rmse_init,best_rmse_lambda,best_test_rmse,best_rmse_nonidentical
+blog,nb2+zinb,quantile_glm,10.0,3527.787634401588,True,poisson+nb2+zinb,kmeans_glm,5.0,-1551.9166733837778,True,nb2+zinb,quantile_glm,20.0,40.09490236656222,True
+crime_beta,student_t+lognormal+lognormal,kmeans_glm,0.25,-2028.178380765002,True,beta+beta+lognormal,kmeans_glm,5.0,1135.8546172071935,True,beta+beta+beta,quantile_glm,10.0,0.13811800962227938,False
+parkinsons_log,student_t+skew_normal+skew_normal,quantile_glm,20.0,1452.179942384838,True,gaussian+gaussian+skew_normal,kmeans_glm,20.0,-286.76833430607735,True,gaussian+student_t,quantile_glm,5.0,0.381814005571084,True
+rand,nb2,quantile_glm,20.0,8768.716570299415,False,zinb+zinb+zinb,kmeans_glm,20.0,-2148.8268475284945,False,zip+zinb+zinb,kmeans_glm,20.0,3.9193502800966256,True
+super_raw,gamma+gamma+lognormal,kmeans_glm,0.25,15776.36543674485,True,gamma+gamma+skew_normal,kmeans_glm,1.0,-3832.478942124226,True,gamma+gamma+gamma,quantile_glm,0.5,18.790146609852474,False

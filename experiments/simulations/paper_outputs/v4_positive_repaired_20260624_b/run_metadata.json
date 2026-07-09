@@ -1,0 +1,41 @@
+{
+  "sim_version": "v4_positive_repaired_louis",
+  "output_root": "paper_outputs/v4_positive_repaired_20260624_b",
+  "n_reps": 100,
+  "sample_sizes": [
+    500,
+    1000,
+    1500
+  ],
+  "scenario_A_examples": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "scenario_B_examples": [
+    1,
+    2,
+    4
+  ],
+  "scenario_C_examples": [
+    1,
+    2,
+    4
+  ],
+  "scenario_B_n": 1000,
+  "scenario_B_p": 20,
+  "scenario_A_beam_width": 10,
+  "lambda_grid": [
+    1,
+    2,
+    5,
+    10,
+    20,
+    50,
+    100,
+    200
+  ],
+  "inference_methods": "louis,numeric",
+  "created_unix_time": 1782304597.2242832
+}

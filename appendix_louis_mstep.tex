@@ -1,0 +1,376 @@
+\appendix
+
+\section{Analytical Louis Blocks and Weighted M-Step Equations}
+\label{app:louis_mstep}
+
+This appendix records the analytical ingredients used by the observed
+information and by the componentwise maximization step.  The main text gives
+the finite-mixture Louis identity and the chain rule that maps a
+family-specific derivative block into regression coordinates.  We now list the
+family blocks in the \((\mu,\gamma)\) coordinates used by the optimizer, and
+then state the weighted M-step equations solved inside the generalized
+expectation-maximization algorithm.
+
+\subsection{Notation for family-specific Louis blocks}
+
+For one observation from one component, write
+\[
+    \ell=\log f(y;\mu,\gamma),\qquad
+    a_\mu=\frac{\partial \ell}{\partial\mu},\qquad
+    b_{\mu\mu}=\frac{\partial^2\ell}{\partial\mu^2},
+\]
+\[
+    a_\gamma=\frac{\partial\ell}{\partial\gamma},\qquad
+    B_{\gamma\gamma}=
+    \frac{\partial^2\ell}{\partial\gamma\,\partial\gamma^\top},
+    \qquad
+    b_{\mu\gamma}=
+    \frac{\partial^2\ell}{\partial\mu\,\partial\gamma}.
+\]
+Cross-derivatives not displayed are zero.  Positive nuisance parameters are
+differentiated after log transformation, and probabilities constrained to
+\((0,1)\) are differentiated after the logit transformation.  The functions
+\(\psi\) and \(\psi_1\) denote the digamma and trigamma functions.
+
+\paragraph{Gaussian.}
+For \(N(\mu,\sigma^2)\), let \(v=\sigma^2=\exp(s)\) and \(r=y-\mu\).  Then
+\[
+    a_\mu=r/v,\qquad b_{\mu\mu}=-1/v,
+\]
+\[
+    a_s=-1/2+r^2/(2v),\qquad
+    B_{ss}=-r^2/(2v),\qquad
+    b_{\mu s}=-r/v.
+\]
+
+\paragraph{Student-\(t\).}
+Let \(\sigma=\exp(a)\), \(\nu=2+\exp(b)\), \(w=\exp(b)\),
+\(r=y-\mu\), \(D=\nu\sigma^2+r^2\), \(u=r^2/\sigma^2\), and
+\(q=1+u/\nu\).  Then
+\[
+    a_\mu=\frac{(\nu+1)r}{D},\qquad
+    b_{\mu\mu}=\frac{(\nu+1)(r^2-\nu\sigma^2)}{D^2},
+\]
+\[
+    a_a=-1+\frac{(\nu+1)r^2}{D},\qquad
+    B_{aa}=-\frac{2(\nu+1)r^2\nu\sigma^2}{D^2},\qquad
+    b_{\mu a}=-\frac{2(\nu+1)r\nu\sigma^2}{D^2}.
+\]
+With
+\[
+    L_\nu=
+    \frac12\psi\!\left(\frac{\nu+1}{2}\right)
+    -\frac12\psi\!\left(\frac{\nu}{2}\right)
+    -\frac{1}{2\nu}
+    -\frac12\log q
+    +\frac{(\nu+1)u}{2\nu(\nu+u)}
+\]
+and
+\[
+    L_{\nu\nu}=
+    \frac14\psi_1\!\left(\frac{\nu+1}{2}\right)
+    -\frac14\psi_1\!\left(\frac{\nu}{2}\right)
+    +\frac{1}{2\nu^2}
+    +\frac{u}{2\nu(\nu+u)}
+    +\frac{\frac12u\nu(\nu+u)-\frac12u(\nu+1)(2\nu+u)}
+           {\{\nu(\nu+u)\}^2},
+\]
+the transformed degree-of-freedom derivatives are
+\[
+    a_b=wL_\nu,\qquad B_{bb}=wL_\nu+w^2L_{\nu\nu},
+\]
+\[
+    b_{\mu b}=\frac{w\,r(r^2-\sigma^2)}{D^2},\qquad
+    B_{ab}=\frac{w\,r^2(r^2-\sigma^2)}{D^2}.
+\]
+
+\paragraph{Poisson.}
+For \(Y\sim\operatorname{Poisson}(\mu)\),
+\[
+    a_\mu=y/\mu-1,\qquad b_{\mu\mu}=-y/\mu^2.
+\]
+
+\paragraph{Negative binomial with quadratic variance.}
+For the NB2 parameterization \(\operatorname{Var}(Y)=\mu+\alpha\mu^2\), let
+\(\rho=\log\alpha\), \(r=\alpha^{-1}=\exp(-\rho)\), and \(A=r+\mu\).  Then
+\[
+    a_\mu=\frac{y}{\mu}-\frac{r+y}{A},\qquad
+    b_{\mu\mu}=-\frac{y}{\mu^2}+\frac{r+y}{A^2}.
+\]
+Define
+\[
+    L_r=\psi(y+r)-\psi(r)+\log r+1-\log A-\frac{r+y}{A},
+\]
+\[
+    L_{rr}=
+    \psi_1(y+r)-\psi_1(r)+1/r-1/A-(\mu-y)/A^2.
+\]
+Then
+\[
+    a_\rho=-rL_r,\qquad
+    B_{\rho\rho}=rL_r+r^2L_{rr},\qquad
+    b_{\mu\rho}=r(\mu-y)/A^2.
+\]
+
+\paragraph{Gamma.}
+For the mean-shape Gamma model with shape \(\kappa=\exp(a)\),
+\[
+    \ell=(\kappa-1)\log y-\kappa y/\mu-\log\Gamma(\kappa)
+    -\kappa\log\mu+\kappa\log\kappa .
+\]
+Let
+\[
+    L_\kappa=\log y-y/\mu-\psi(\kappa)-\log\mu+\log\kappa+1,
+    \qquad
+    L_{\kappa\kappa}=-\psi_1(\kappa)+1/\kappa .
+\]
+Then
+\[
+    a_\mu=\kappa(y-\mu)/\mu^2,\qquad
+    b_{\mu\mu}=\kappa(\mu-2y)/\mu^3,
+\]
+\[
+    a_a=\kappa L_\kappa,\qquad
+    B_{aa}=\kappa L_\kappa+\kappa^2L_{\kappa\kappa},\qquad
+    b_{\mu a}=a_\mu.
+\]
+
+\paragraph{Exponential.}
+For the exponential distribution parameterized by its mean,
+\[
+    a_\mu=(y-\mu)/\mu^2,\qquad b_{\mu\mu}=(\mu-2y)/\mu^3.
+\]
+
+\paragraph{Lognormal.}
+For the lognormal component, \(\mu\) denotes log-location.  Let
+\(\sigma=\exp(a)\) and \(r=\log y-\mu\).  Then
+\[
+    a_\mu=r/\sigma^2,\qquad b_{\mu\mu}=-1/\sigma^2,
+\]
+\[
+    a_a=-1+r^2/\sigma^2,\qquad
+    B_{aa}=-2r^2/\sigma^2,\qquad
+    b_{\mu a}=-2r/\sigma^2.
+\]
+
+\paragraph{Inverse Gaussian.}
+For mean \(\mu\) and \(\lambda=\exp(a)\), let
+\[
+    A=(y-\mu)^2/(2\mu^2y).
+\]
+Then
+\[
+    a_\mu=\lambda(y-\mu)/\mu^3,\qquad
+    b_{\mu\mu}=\lambda(2\mu-3y)/\mu^4,
+\]
+\[
+    a_a=1/2-\lambda A,\qquad
+    B_{aa}=-\lambda A,\qquad
+    b_{\mu a}=a_\mu.
+\]
+
+\paragraph{Bernoulli and geometric.}
+For Bernoulli success probability \(\mu\),
+\[
+    a_\mu=\frac{y}{\mu}-\frac{1-y}{1-\mu},\qquad
+    b_{\mu\mu}=-\frac{y}{\mu^2}-\frac{1-y}{(1-\mu)^2}.
+\]
+For the geometric law on \(\{0,1,\ldots\}\) parameterized by mean \(\mu\),
+\[
+    a_\mu=y/\mu-(y+1)/(1+\mu),\qquad
+    b_{\mu\mu}=-y/\mu^2+(y+1)/(1+\mu)^2.
+\]
+
+\paragraph{Beta.}
+For the beta mean-precision parameterization, let
+\(\phi=\exp(a)\), \(A=\mu\phi\), and \(B=(1-\mu)\phi\).  Define
+\[
+    G=-\psi(A)+\psi(B)+\log y-\log(1-y),
+\]
+\[
+    L_\phi=
+    \psi(\phi)-\mu\psi(A)-(1-\mu)\psi(B)
+    +\mu\log y+(1-\mu)\log(1-y),
+\]
+\[
+    L_{\phi\phi}=
+    \psi_1(\phi)-\mu^2\psi_1(A)-(1-\mu)^2\psi_1(B).
+\]
+Then
+\[
+    a_\mu=\phi G,\qquad
+    b_{\mu\mu}=-\phi^2\{\psi_1(A)+\psi_1(B)\},
+\]
+\[
+    a_a=\phi L_\phi,\qquad
+    B_{aa}=\phi L_\phi+\phi^2L_{\phi\phi},
+\]
+\[
+    b_{\mu a}=
+    \phi G+\phi^2\{-\mu\psi_1(A)+(1-\mu)\psi_1(B)\}.
+\]
+
+\paragraph{Zero-inflated Poisson.}
+Let \(\zeta=\operatorname{logit}(\theta)\),
+\(\dot\theta=\theta(1-\theta)\).  For \(y>0\),
+\[
+    a_\mu=y/\mu-1,\qquad b_{\mu\mu}=-y/\mu^2,\qquad
+    a_\zeta=-\theta,\qquad B_{\zeta\zeta}=-\dot\theta.
+\]
+For \(y=0\), let \(e=\exp(-\mu)\),
+\[
+    A=\theta+(1-\theta)e,\quad B=(1-\theta)e,\quad
+    C=\dot\theta(1-e),\quad
+    C_\zeta=\dot\theta(1-2\theta)(1-e).
+\]
+Then
+\[
+    a_\mu=-B/A,\qquad b_{\mu\mu}=B\theta/A^2,
+\]
+\[
+    a_\zeta=C/A,\qquad
+    B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,\qquad
+    b_{\mu\zeta}=(\dot\theta eA+CB)/A^2.
+\]
+
+\paragraph{Zero-inflated negative binomial.}
+For positive counts, use the NB2 block and add
+\[
+    a_\zeta=-\theta,\qquad B_{\zeta\zeta}=-\theta(1-\theta).
+\]
+For \(y=0\), let \(p_0=\{r/(r+\mu)\}^r\),
+\[
+    A=\theta+(1-\theta)p_0,\quad
+    C=\dot\theta(1-p_0),\quad
+    C_\zeta=\dot\theta(1-2\theta)(1-p_0).
+\]
+Let \(g_j\) and \(H_{j\ell}\) be the NB2 score and Hessian entries for
+\(\log p_0\) in \(j,\ell\in\{\mu,\rho\}\).  Define
+\[
+    A_j=(1-\theta)p_0g_j,\qquad
+    A_{j\ell}=(1-\theta)p_0(H_{j\ell}+g_jg_\ell),\qquad
+    A_{j\zeta}=-\dot\theta p_0g_j .
+\]
+Then
+\[
+    a_j=A_j/A,\qquad
+    B_{j\ell}=(A_{j\ell}A-A_jA_\ell)/A^2,
+\]
+\[
+    a_\zeta=C/A,\qquad
+    B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,\qquad
+    B_{j\zeta}=(A_{j\zeta}A-A_jC)/A^2.
+\]
+
+\paragraph{Skew normal.}
+For the Azzalini skew-normal component, let \(\omega=\exp(a)\),
+\(\alpha\) be the shape, \(z=(y-\mu)/\omega\), and \(t=\alpha z\).
+With \(M(t)=\varphi(t)/\Phi(t)\) and
+\(M'(t)=-M(t)\{t+M(t)\}\), set
+\[
+    \ell_z=-z+\alpha M(t),\quad
+    \ell_{zz}=-1+\alpha^2M'(t),\quad
+    \ell_{z\alpha}=M(t)+\alpha zM'(t).
+\]
+Then
+\[
+    a_\mu=-\ell_z/\omega,\qquad
+    b_{\mu\mu}=\ell_{zz}/\omega^2,
+\]
+\[
+    a_a=-1-z\ell_z,\qquad
+    a_\alpha=zM(t),
+\]
+\[
+    B_{aa}=z\ell_z+z^2\ell_{zz},\qquad
+    B_{\alpha\alpha}=z^2M'(t),\qquad
+    B_{a\alpha}=-z\ell_{z\alpha},
+\]
+\[
+    b_{\mu a}=(\ell_z+z\ell_{zz})/\omega,\qquad
+    b_{\mu\alpha}=-\ell_{z\alpha}/\omega.
+\]
+
+\subsection{Weighted M-step equations}
+\label{app:mstep}
+
+At an expectation-maximization iteration, component \(k\) receives weights
+\(w_i=\tau_{ik}\).  Its regression and nuisance update solves
+\[
+    (\beta_k^{+},\gamma_k^{+})
+    \in
+    \argmax_{\beta,\gamma}
+    \left\{
+    \sum_{i=1}^n w_i
+    \ell_{d_k}\{y_i;h_{d_k}(x_i^\top\beta),\gamma\}
+    -
+    \lambda_k\rho_k(\beta_{-0})
+    \right\}.
+\]
+The intercept is not penalized.  With
+\[
+    U_{\eta i}=a_{\mu i}\dot h_i,\qquad
+    J_{\eta i}=-
+    \{b_{\mu\mu,i}\dot h_i^2+a_{\mu i}\ddot h_i\},
+\]
+the unpenalized score and negative Hessian for the regression coordinates are
+\[
+    U_\beta(\beta,\gamma)=\sum_{i=1}^n w_i x_i U_{\eta i},
+    \qquad
+    J_{\beta\beta}(\beta,\gamma)=
+    \sum_{i=1}^n w_i x_ix_i^\top J_{\eta i}.
+\]
+Thus a Newton or iteratively reweighted least-squares step has working
+response
+\[
+    z_i=x_i^\top\beta+U_{\eta i}/J_{\eta i}
+\]
+and working weight \(w_iJ_{\eta i}\), whenever \(J_{\eta i}>0\).  The
+unpenalized active-coordinate update is
+\[
+    \beta_{\mathcal A}^{+}
+    =
+    \argmin_b
+    \frac12
+    \sum_{i=1}^n w_iJ_{\eta i}
+    (z_i-x_{i,\mathcal A}^\top b)^2.
+\]
+For a ridge penalty this becomes the usual penalized normal equation, with no
+ridge term on the intercept.  For a lasso penalty, the coordinatewise quadratic
+approximation gives the soft-thresholding update
+\[
+    \beta_j^{+}
+    =
+    \frac{
+    S\left\{
+    \sum_i w_iJ_{\eta i}x_{ij}
+    \left(z_i-\sum_{\ell\neq j}x_{i\ell}\beta_\ell\right),
+    \lambda_k
+    \right\}}
+    {\sum_i w_iJ_{\eta i}x_{ij}^2},
+    \qquad j>0,
+\]
+where \(S(u,\lambda)=\operatorname{sign}(u)(|u|-\lambda)_+\).  Elastic-net
+updates replace the denominator by
+\(\sum_i w_iJ_{\eta i}x_{ij}^2+\lambda_k(1-\alpha)\) and use
+\(\lambda_k\alpha\) in the threshold.
+
+The nuisance update is low-dimensional and uses the same weighted likelihood.
+For example, the Gaussian variance has the closed-form update
+\[
+    \hat\sigma_k^2
+    =
+    \frac{\sum_i w_i(y_i-x_i^\top\beta_k)^2}{\sum_i w_i}.
+\]
+For NB2 dispersion, Gamma shape, Student-\(t\) scale and degrees of freedom,
+zero-inflation probabilities, beta precision, and skew-normal shape and scale,
+the update solves
+\[
+    U_\gamma(\beta,\gamma)=
+    \sum_{i=1}^n w_i a_{\gamma i}=0
+\]
+by a scalar or low-dimensional Newton/L-BFGS step using the analytical
+\(B_{\gamma\gamma}\) and \(b_{\mu\gamma}\) blocks above.  If the block update
+increases the weighted penalized objective but is not globally maximized, the
+outer algorithm is a generalized EM algorithm; the monotonicity theorem in the
+main text applies under that explicit ascent condition.

@@ -1,0 +1,839 @@
+\section{Methodology}
+\label{sec:methodology}
+
+The methodology has three layers: the fixed family-tuple likelihood model, the
+penalized expectation-maximization computation used to fit a candidate, and the
+model-search device used to compare candidate tuples.  We state these layers
+separately because they have different mathematical status and lead to
+different inferential claims.
+
+\subsection{Scope of the methodology}
+
+We first define the statistical object studied in the paper and separate three
+regimes that require different inferential arguments.
+
+First, the regular fixed-model regime treats the number of components \(K\) and
+the ordered tuple of component families
+\[
+    \mathfrak m=(d_1,\ldots,d_K)
+\]
+as fixed.  The true parameter is assumed to be an interior point, no two
+components coincide, mixing weights are bounded away from zero, and the Fisher
+information is nonsingular after a labeling convention is imposed.  The
+identifiability, consistency, asymptotic normality, Louis-information, and EM
+monotonicity results below are proved for this regime.
+
+Second, penalized estimation is used as a computational and regularization
+device.  Penalization changes the distributional limit of the estimator unless
+the tuning parameter is asymptotically negligible at the \(n^{-1/2}\) scale.
+For this reason, the likelihood-based standard errors in this paper target the
+unpenalized estimator, or a post-selection refit on a fixed selected model, not
+the raw lasso estimator.
+
+Third, choosing \(K\), choosing the family tuple, and comparing nested families
+such as Poisson inside negative binomial are model-selection and nonregular
+problems.  We describe the procedure used in the computations, but the regular
+asymptotic theorems do not by themselves justify ordinary Wald inference after
+family search, component-number search, or boundary selection.
+
+\subsection{Fixed family-tuple model}
+
+Let \((Y_i,X_i)\), \(i=1,\ldots,n\), be independent observations from the joint
+law of \((Y,X)\), where \(Y\in\mathcal Y\subseteq\mathbb R\) and
+\(X\in\mathcal X\subseteq\mathbb R^p\).  The first component of \(X\) is an
+intercept.  For a fixed model \(\mathfrak m=(d_1,\ldots,d_K)\), assume that all
+families in \(\mathfrak m\) are dominated by a common sigma-finite measure
+\(\nu\) on \(\mathcal Y\).  This excludes mixtures whose component laws live on
+incompatible supports unless a common dominating measure has been explicitly
+specified.
+
+For family \(d\), let
+\[
+    f_d(y;\mu,\gamma)
+\]
+denote its density or mass function with respect to \(\nu\), where
+\(\mu\in\mathcal M_d\) is the systematic location or mean-like parameter and
+\(\gamma\in\Gamma_d\) is a finite-dimensional nuisance parameter.  The inverse
+link is denoted by
+\[
+    h_d(\eta)=g_d^{-1}(\eta).
+\]
+For component \(k\), define
+\[
+    q_k(y\mid x;\beta_k,\gamma_k)
+    =
+    f_{d_k}\{y;h_{d_k}(x^\top\beta_k),\gamma_k\}.
+\]
+The conditional mixture density is
+\[
+    p_\theta(y\mid x)
+    =
+    \sum_{k=1}^K \pi_k q_k(y\mid x;\beta_k,\gamma_k),
+    \qquad
+    \pi_k>0,\quad \sum_{k=1}^K\pi_k=1,
+\]
+where
+\[
+    \theta=\{(\pi_k,\beta_k,\gamma_k):k=1,\ldots,K\}\in\Theta_{\mathfrak m}.
+\]
+The family labels \(d_k\) are part of the model \(\mathfrak m\), not continuous
+parameters.
+
+Because finite mixtures are invariant under relabeling, \(\theta\) is
+identifiable at best up to permutations that preserve the multiset of
+components.  In local asymptotic statements we work in a labeled neighborhood of
+the true parameter, for example by imposing a deterministic ordering rule.  All
+global identifiability statements are understood modulo label permutations.
+
+\subsection{Observed and penalized likelihoods}
+
+For fixed \(\mathfrak m\), the observed log-likelihood is
+\[
+    \ell_n(\theta)
+    =
+    \sum_{i=1}^n
+    \log p_\theta(Y_i\mid X_i).
+\]
+The unpenalized estimator is
+\[
+    \hat\theta_n
+    \in
+    \argmax_{\theta\in\Theta_{\mathfrak m}}\ell_n(\theta).
+\]
+
+For regularized estimation, let \(\beta_{k,-0}\) denote the non-intercept
+coordinates of \(\beta_k\).  We use penalties of the form
+\[
+    P_n(\theta)
+    =
+    \sum_{k=1}^K \lambda_{n,k}\rho_k(\beta_{k,-0}),
+\]
+where \(\rho_k\) may be ridge, lasso, or elastic-net.  The penalized estimator
+is
+\[
+    \hat\theta_{n,\lambda}
+    \in
+    \argmax_{\theta\in\Theta_{\mathfrak m}}
+    \{\ell_n(\theta)-P_n(\theta)\}.
+\]
+The intercept is not penalized.  This convention follows standard sparse
+regression practice \citep{tibshirani1996lasso} and is used throughout.
+
+\subsection{Expectation-maximization representation}
+
+Introduce latent variables \(Z_i\in\{1,\ldots,K\}\) with
+\(\Pr(Z_i=k)=\pi_k\).  Given \(Z_i=k\), the conditional density of \(Y_i\) is
+\(q_k(Y_i\mid X_i;\beta_k,\gamma_k)\).  The complete-data log-likelihood is
+\[
+    \ell_{c,n}(\theta)
+    =
+    \sum_{i=1}^n\sum_{k=1}^K
+    \mathbbm 1(Z_i=k)
+    \{\log\pi_k+\log q_k(Y_i\mid X_i;\beta_k,\gamma_k)\}.
+\]
+Given the current parameter \(\theta^{(t)}\), the posterior responsibilities are
+\[
+    \tau_{ik}^{(t)}
+    =
+    \frac{
+        \pi_k^{(t)}q_k(Y_i\mid X_i;\beta_k^{(t)},\gamma_k^{(t)})
+    }{
+        \sum_{\ell=1}^K
+        \pi_\ell^{(t)}
+        q_\ell(Y_i\mid X_i;\beta_\ell^{(t)},\gamma_\ell^{(t)})
+    }.
+\]
+The penalized EM objective is
+\[
+    Q_{P,n}(\theta\mid\theta^{(t)})
+    =
+    \sum_{i=1}^n\sum_{k=1}^K
+    \tau_{ik}^{(t)}
+    \{\log\pi_k+\log q_k(Y_i\mid X_i;\beta_k,\gamma_k)\}
+    -
+    P_n(\theta).
+\]
+The resulting construction follows the EM principle of
+\citet{dempster1977em}.  The mixing proportions have the closed-form update
+\[
+    \pi_k^{(t+1)}
+    =
+    n^{-1}\sum_{i=1}^n\tau_{ik}^{(t)}.
+\]
+The remaining update decomposes by component:
+\[
+    (\beta_k^{(t+1)},\gamma_k^{(t+1)})
+    \in
+    \argmax_{\beta_k,\gamma_k}
+    \left[
+    \sum_{i=1}^n\tau_{ik}^{(t)}
+    \log q_k(Y_i\mid X_i;\beta_k,\gamma_k)
+    -
+    \lambda_{n,k}\rho_k(\beta_{k,-0})
+    \right].
+\]
+When this maximization is exact, the algorithm is an EM algorithm for the
+penalized objective.  When the component update is only improved, but not
+globally maximized, the algorithm is a generalized EM algorithm.  The
+monotonicity result below requires the explicit ascent condition
+\[
+    Q_{P,n}(\theta^{(t+1)}\mid\theta^{(t)})
+    \ge
+    Q_{P,n}(\theta^{(t)}\mid\theta^{(t)}).
+\]
+
+\subsection{Model search}
+
+Let \(\mathcal D\) be a finite collection of candidate response families.  We
+consider only family tuples whose supports are compatible with the observed
+support of \(Y\).  For a fitted model \(\mathfrak m\), define
+\[
+    \mathrm{BIC}(\mathfrak m)
+    =
+    -2\ell_n(\hat\theta_{\mathfrak m})
+    +
+    a_{\mathfrak m}\log n,
+\]
+where BIC denotes the Bayesian information criterion and
+\(a_{\mathfrak m}\) is the number of free parameters in the fixed model
+\citep{schwarz1978dimensions}.
+For penalized fits we use the active-set analogue
+\[
+    \hat a_{\mathfrak m}
+    =
+    (K-1)
+    +K
+    +
+    \sum_{k=1}^K
+    \#\{j>0:\hat\beta_{kj}\neq 0\}
+    +
+    \sum_{k=1}^K\dim(\gamma_k),
+\]
+as a computational model-selection score.  This active-set BIC is a heuristic
+unless an additional post-selection theory is supplied.
+
+For small candidate spaces we enumerate all unordered family tuples.  For
+larger spaces the implementation uses a beam search: tuples of size \(K\) are
+expanded from retained tuples of size \(K-1\), fitted by the EM procedure, and
+only the best few according to the chosen criterion are carried forward.  The
+beam search is a deterministic heuristic conditional on initialization and
+random seed; it does not inherit the fixed-model regularity theory.
+
+\section{Theoretical properties}
+\label{sec:theory}
+
+We next record the likelihood properties that are used to interpret a fitted
+candidate model.  The results are intentionally conditional on a fixed,
+regular, identifiable candidate; later family search, component-number
+selection, and active-set selection are treated as separate nonregular
+operations.
+
+\subsection{Regular fixed-model assumptions}
+
+All results in Sections~\ref{sec:identifiability}--\ref{sec:louis_theory}
+condition on a fixed family tuple \(\mathfrak m=(d_1,\ldots,d_K)\).  Write
+\(\theta_0\) for the true parameter.
+
+\begin{assumption}[Sampling]
+\label{ass:sampling}
+The observations \((Y_i,X_i)\), \(i=1,\ldots,n\), are independent and
+identically distributed.  Conditional on \(X=x\), the true density of \(Y\) is
+\(p_{\theta_0}(y\mid x)\) for some \(\theta_0\in\Theta_{\mathfrak m}\).
+\end{assumption}
+
+\begin{assumption}[Parameter space]
+\label{ass:param_space}
+The parameter space \(\Theta_{\mathfrak m}\) is compact after imposing a
+labeling convention.  The true parameter \(\theta_0\) is an interior point of
+this labeled parameter space.  There exists \(\pi_{\min}>0\) such that
+\(\pi_k\ge \pi_{\min}\) for all \(k\) and all \(\theta\in\Theta_{\mathfrak m}\).
+Nuisance parameters are bounded away from degeneracies such as zero variances,
+infinite dispersions, and boundary zero-inflation probabilities.
+\end{assumption}
+
+\begin{assumption}[Continuity and domination]
+\label{ass:continuity}
+For each \((y,x)\), \(p_\theta(y\mid x)\) is continuous in \(\theta\).  Moreover
+\(\log p_\theta(Y\mid X)\) is dominated by an integrable envelope in a
+neighborhood of every \(\theta\in\Theta_{\mathfrak m}\), so that
+\[
+    \sup_{\theta\in\Theta_{\mathfrak m}}
+    \left|
+    n^{-1}\ell_n(\theta)
+    -
+    E_{\theta_0}\log p_\theta(Y\mid X)
+    \right|
+    \to 0
+\]
+in probability.
+\end{assumption}
+
+\begin{assumption}[Primitive component identifiability]
+\label{ass:primitive_component}
+For each family \(d\), if
+\[
+    f_d(y;\mu_1,\gamma_1)=f_d(y;\mu_2,\gamma_2)
+    \quad\text{for \(\nu\)-almost every }y,
+\]
+then \((\mu_1,\gamma_1)=(\mu_2,\gamma_2)\).  The inverse link \(h_d\) is
+one-to-one on its domain.  Finally, if \(X^\top b=0\) almost surely, then
+\(b=0\).
+\end{assumption}
+
+\begin{assumption}[Finite-mixture separability]
+\label{ass:mixture_separability}
+The collection of component regression densities
+\[
+    \mathcal Q_{\mathfrak m}
+    =
+    \left\{
+    q_k(\cdot\mid\cdot;\beta,\gamma):
+    k=1,\ldots,K,\;(\beta,\gamma)\in\mathcal B_{d_k}\times\Gamma_{d_k}
+    \right\}
+\]
+is \(K\)-identifiable in the following sense.  If two mixtures with at most
+\(K\) nonzero components satisfy
+\[
+    \sum_{r=1}^{m} a_r q_r(y\mid x)
+    =
+    \sum_{s=1}^{m'} b_s \tilde q_s(y\mid x)
+\]
+for \(P_X\)-almost every \(x\) and \(\nu\)-almost every \(y\), where
+\(a_r,b_s>0\), \(\sum_r a_r=\sum_s b_s=1\), and all atoms on each side are
+distinct, then \(m=m'\) and the two sets of weighted atoms are equal up to
+permutation.
+\end{assumption}
+
+\begin{remark}
+Assumption~\ref{ass:mixture_separability} is the nontrivial finite-mixture
+identifiability condition.  It is intentionally stated explicitly rather than
+hidden behind the phrase ``standard mixture arguments.''  It must be verified
+or cited for any family tuple used as a formal model.  It can fail at nested or
+boundary cases, for example when an overdispersed family contains a simpler
+family as a limiting special case; see \citet{teicher1963identifiability} and
+\citet{hennig2000identifiability} for foundational results and regression-mixture
+qualifications.
+\end{remark}
+
+\subsection{Identifiability}
+\label{sec:identifiability}
+
+\begin{lemma}[Component regression identifiability]
+\label{lem:component_ident}
+Under Assumption~\ref{ass:primitive_component}, for a fixed family \(d\),
+\[
+    f_d\{y;h_d(x^\top\beta_1),\gamma_1\}
+    =
+    f_d\{y;h_d(x^\top\beta_2),\gamma_2\}
+\]
+for \(P_X\)-almost every \(x\) and \(\nu\)-almost every \(y\) implies
+\[
+    \beta_1=\beta_2,
+    \qquad
+    \gamma_1=\gamma_2.
+\]
+\end{lemma}
+
+\begin{proof}
+By primitive identifiability of the family, for \(P_X\)-almost every \(x\),
+\[
+    h_d(x^\top\beta_1)=h_d(x^\top\beta_2),
+    \qquad
+    \gamma_1=\gamma_2.
+\]
+Since \(h_d\) is one-to-one,
+\[
+    x^\top(\beta_1-\beta_2)=0
+\]
+for \(P_X\)-almost every \(x\).  The full-rank condition in
+Assumption~\ref{ass:primitive_component} then gives \(\beta_1=\beta_2\).
+\end{proof}
+
+\begin{theorem}[Identifiability of the fixed family-tuple model]
+\label{thm:fixed_ident}
+Suppose Assumptions~\ref{ass:param_space}, \ref{ass:primitive_component}, and
+\ref{ass:mixture_separability} hold.  If
+\[
+    p_{\theta_1}(y\mid x)=p_{\theta_2}(y\mid x)
+\]
+for \(P_X\)-almost every \(x\) and \(\nu\)-almost every \(y\), then
+\(\theta_1\) and \(\theta_2\) are equal up to a permutation of component
+labels.
+\end{theorem}
+
+\begin{proof}
+Write both sides as finite mixtures of distinct component regression densities.
+If any repeated atom occurs within either representation, combine its weights;
+Assumption~\ref{ass:param_space} keeps all remaining weights positive.
+Assumption~\ref{ass:mixture_separability} implies equality of the weighted
+atoms up to permutation.  Therefore, after relabeling,
+\[
+    \pi_k^{(1)}=\pi_k^{(2)}
+    \quad\text{and}\quad
+    q_k(\cdot\mid\cdot;\beta_k^{(1)},\gamma_k^{(1)})
+    =
+    q_k(\cdot\mid\cdot;\beta_k^{(2)},\gamma_k^{(2)}).
+\]
+Lemma~\ref{lem:component_ident} then gives
+\((\beta_k^{(1)},\gamma_k^{(1)})
+=
+(\beta_k^{(2)},\gamma_k^{(2)})\) for every \(k\).
+\end{proof}
+
+\subsection{Existence and consistency}
+
+\begin{theorem}[Consistency of the maximum likelihood estimator]
+\label{thm:consistency}
+Under Assumptions~\ref{ass:sampling}--\ref{ass:mixture_separability}, an
+unpenalized maximizer \(\hat\theta_n\) exists with probability tending to one.
+Moreover, after applying the labeling convention,
+\[
+    \hat\theta_n\to\theta_0
+\]
+in probability.
+\end{theorem}
+
+\begin{proof}
+Existence follows from compactness of \(\Theta_{\mathfrak m}\) and continuity of
+\(\ell_n(\theta)\).  Define the population criterion
+\[
+    M(\theta)=E_{\theta_0}\log p_\theta(Y\mid X).
+\]
+By Assumption~\ref{ass:continuity},
+\[
+    \sup_{\theta\in\Theta_{\mathfrak m}}
+    |n^{-1}\ell_n(\theta)-M(\theta)|
+    \to 0
+\]
+in probability.  For any \(\theta\),
+\[
+    M(\theta)-M(\theta_0)
+    =
+    -E_{\theta_0}
+    \log\frac{p_{\theta_0}(Y\mid X)}{p_\theta(Y\mid X)}
+    \le 0,
+\]
+with equality if and only if
+\[
+    p_\theta(Y\mid X)=p_{\theta_0}(Y\mid X)
+\]
+almost surely.  By Theorem~\ref{thm:fixed_ident} and the imposed labeling
+convention, equality holds only at \(\theta=\theta_0\).  Hence \(M\) has a
+unique maximizer at \(\theta_0\).  The argmax theorem gives
+\(\hat\theta_n\to\theta_0\) in probability.
+\end{proof}
+
+\subsection{Regular asymptotic normality}
+
+\begin{assumption}[Local differentiability and information]
+\label{ass:local_regular}
+In a neighborhood of \(\theta_0\), the labeled parameter can be represented as a
+vector in an open subset of \(\mathbb R^r\).  The map
+\(\theta\mapsto \log p_\theta(Y\mid X)\) is twice continuously differentiable
+in this neighborhood, differentiation may be interchanged with expectation, and
+the Fisher information
+\[
+    I(\theta_0)
+    =
+    E_{\theta_0}
+    \left[
+        S_{\theta_0}(Y,X)S_{\theta_0}(Y,X)^\top
+    \right],
+    \qquad
+    S_{\theta}(Y,X)=\nabla_\theta\log p_\theta(Y\mid X),
+\]
+is finite and nonsingular.
+\end{assumption}
+
+\begin{theorem}[Asymptotic normality in the regular fixed model]
+\label{thm:asymptotic_normality}
+Under Assumptions~\ref{ass:sampling}--\ref{ass:local_regular},
+\[
+    \sqrt n(\hat\theta_n-\theta_0)
+    \Rightarrow
+    N\{0,I(\theta_0)^{-1}\}.
+\]
+\end{theorem}
+
+\begin{proof}
+The score equation satisfies
+\[
+    0=\nabla_\theta\ell_n(\hat\theta_n)
+\]
+with probability tending to one for an interior local maximizer.  Taylor
+expansion around \(\theta_0\) gives
+\[
+    0
+    =
+    \nabla_\theta\ell_n(\theta_0)
+    +
+    \nabla_\theta^2\ell_n(\tilde\theta_n)
+    (\hat\theta_n-\theta_0),
+\]
+where \(\tilde\theta_n\) lies between \(\hat\theta_n\) and \(\theta_0\).  By the
+central limit theorem,
+\[
+    n^{-1/2}\nabla_\theta\ell_n(\theta_0)
+    \Rightarrow
+    N\{0,I(\theta_0)\}.
+\]
+By consistency and the uniform law of large numbers for the Hessian,
+\[
+    -n^{-1}\nabla_\theta^2\ell_n(\tilde\theta_n)
+    \to
+    I(\theta_0)
+\]
+in probability.  Solving the Taylor expansion and applying Slutsky's theorem
+proves the result.
+\end{proof}
+
+\subsection{Louis identity and standard errors}
+\label{sec:louis_theory}
+
+The preceding asymptotic normality result requires the observed information
+matrix for a fitted mixture.  Direct numerical differentiation of the observed
+mixture likelihood is possible, but it is unstable when components have
+different response families or nuisance parameters on different scales.  We
+therefore use \citet{louis1982information}'s identity to express the observed information through
+complete-data component scores and Hessians.
+
+For one observation, let \(Z_i\in\{1,\ldots,K\}\) be the latent component label
+and write
+\[
+    c_{ik}(\theta)
+    =
+    \log \pi_k+\log f_{d_k}\{Y_i;h_{d_k}(X_i^\top\beta_k),\gamma_k\}.
+\]
+The posterior responsibility is
+\[
+    \tau_{ik}(\theta)
+    =
+    \Pr_\theta(Z_i=k\mid Y_i,X_i)
+    =
+    \frac{\exp\{c_{ik}(\theta)\}}
+    {\sum_{\ell=1}^K\exp\{c_{i\ell}(\theta)\}}.
+\]
+Let
+\[
+    s_{ik}(\theta)=\nabla_\theta c_{ik}(\theta),
+    \qquad
+    H_{ik}(\theta)=\nabla_\theta^2 c_{ik}(\theta),
+\]
+where entries outside component \(k\) are zero except for the
+mixing-proportion coordinates.
+
+\begin{theorem}[Louis observed-information identity for a finite mixture]
+\label{thm:louis}
+Under the regular fixed-model conditions, the observed information contribution
+of observation \(i\) is
+\[
+    I_i(\theta)
+    =
+    -\sum_{k=1}^K\tau_{ik}(\theta)H_{ik}(\theta)
+    -
+    \sum_{k=1}^K\tau_{ik}(\theta)
+    \{s_{ik}(\theta)-\bar s_i(\theta)\}
+    \{s_{ik}(\theta)-\bar s_i(\theta)\}^\top,
+\]
+where
+\[
+    \bar s_i(\theta)=\sum_{k=1}^K\tau_{ik}(\theta)s_{ik}(\theta).
+\]
+Equivalently,
+\[
+    I_{\mathrm{obs},n}(\theta)
+    =
+    \sum_{i=1}^n I_i(\theta)
+    =
+    -E_\theta\{\nabla_\theta^2\ell_c(\theta)\mid Y,X\}
+    -
+    \operatorname{Var}_\theta\{\nabla_\theta\ell_c(\theta)\mid Y,X\}.
+\]
+\end{theorem}
+
+\begin{proof}
+For fixed \((Y_i,X_i)\), the observed log-likelihood contribution is
+\[
+    \ell_i(\theta)=\log\sum_{k=1}^K\exp\{c_{ik}(\theta)\}.
+\]
+Differentiating once gives Fisher's identity in finite-sum form,
+\[
+    \nabla_\theta\ell_i(\theta)
+    =
+    \sum_{k=1}^K\tau_{ik}(\theta)s_{ik}(\theta).
+\]
+Since
+\[
+    \nabla_\theta\tau_{ik}(\theta)
+    =
+    \tau_{ik}(\theta)\{s_{ik}(\theta)-\bar s_i(\theta)\},
+\]
+a second differentiation yields
+\[
+    \nabla_\theta^2\ell_i(\theta)
+    =
+    \sum_{k=1}^K\tau_{ik}(\theta)H_{ik}(\theta)
+    +
+    \sum_{k=1}^K\tau_{ik}(\theta)
+    \{s_{ik}(\theta)-\bar s_i(\theta)\}
+    \{s_{ik}(\theta)-\bar s_i(\theta)\}^\top.
+\]
+The observed information is \(-\nabla_\theta^2\ell_i(\theta)\).  Summing over
+observations gives the sample identity.
+\end{proof}
+
+For the mixing proportions, the implementation uses \(K-1\) free logits
+\(a=(a_1,\ldots,a_{K-1})\), with \(a_K=0\) and
+\(\pi_k=\exp(a_k)/\sum_{\ell=1}^K\exp(a_\ell)\).  Then, for
+\(j=1,\ldots,K-1\),
+\[
+    \frac{\partial\log\pi_k}{\partial a_j}
+    =
+    \mathbbm 1(k=j)-\pi_j,
+    \qquad
+    \frac{\partial^2\log\pi_k}{\partial a\,\partial a^\top}
+    =
+    -\{\operatorname{diag}(\pi_{1:K-1})
+    -\pi_{1:K-1}\pi_{1:K-1}^\top\}.
+\]
+
+The component-specific part of \(s_{ik}\) and \(H_{ik}\) is obtained by
+combining a family-level derivative block with the GLM link.  For a single
+component, write \(\eta=x^\top\beta\), \(\mu=h(\eta)\), and
+\(\ell=\log f(y;\mu,\gamma)\).  Define
+\[
+    a_\mu=\frac{\partial \ell}{\partial\mu},\qquad
+    b_{\mu\mu}=\frac{\partial^2\ell}{\partial\mu^2},\qquad
+    a_\gamma=\frac{\partial\ell}{\partial\gamma},\qquad
+    B_{\gamma\gamma}=\frac{\partial^2\ell}{\partial\gamma\,\partial\gamma^\top},
+    \qquad
+    b_{\mu\gamma}=\frac{\partial^2\ell}{\partial\mu\,\partial\gamma}.
+\]
+
+\begin{proposition}[Regression-coordinate derivative block]
+\label{prop:louis_chain_rule}
+Let \(\dot h(\eta)\) and \(\ddot h(\eta)\) denote the first and second
+derivatives of the inverse link.  The complete-data score and Hessian block in
+\((\beta,\gamma)\) coordinates is
+\[
+    s_\beta=x\,a_\mu\dot h(\eta),
+    \qquad
+    s_\gamma=a_\gamma,
+\]
+\[
+    H_{\beta\beta}
+    =
+    xx^\top\{b_{\mu\mu}\dot h(\eta)^2+a_\mu\ddot h(\eta)\},
+    \qquad
+    H_{\beta\gamma}
+    =
+    x\{\dot h(\eta)b_{\mu\gamma}\}^\top,
+    \qquad
+    H_{\gamma\gamma}=B_{\gamma\gamma}.
+\]
+\end{proposition}
+
+\begin{proof}
+The identities follow from the chain rule applied to
+\(\ell\{h(x^\top\beta),\gamma\}\).  Since \(x^\top\beta\) is linear in
+\(\beta\), the only second derivative introduced by the link is
+\(\ddot h(\eta)\) in the scalar \(\eta\)-direction.  Differentiating the
+\(\eta\)-score with respect to \(\gamma\) gives the displayed cross block.
+\end{proof}
+
+The family-specific quantities
+\((a_\mu,b_{\mu\mu},a_\gamma,B_{\gamma\gamma},b_{\mu\gamma})\) are available in
+closed form for the families used in the simulations and applications.
+Appendix~\ref{app:louis_mstep} lists the analytical blocks and the weighted
+M-step equations, while the Supplementary Material gives additional derivation
+details and implementation validation.
+
+In the regular unpenalized model, standard errors are obtained from
+\[
+    \widehat{\operatorname{Var}}(\hat\theta_n)
+    =
+    I_{\mathrm{obs},n}(\hat\theta_n)^{-1},
+\]
+where \(I_{\mathrm{obs},n}\) is the sample observed information.  These standard
+errors are conditional on the fixed family tuple, fixed number of components,
+and fixed labeling convention.
+
+\subsection{Penalization and the limit distribution}
+
+Naive Wald intervals for the raw lasso estimator require care
+\citep{knight2000asymptotics,leeb2005selection}.  The next proposition records
+the fixed-dimensional limit under an \(\ell_1\) penalty.
+
+\begin{proposition}[Local limit of penalized estimators]
+\label{prop:penalty_limit}
+Assume the regular fixed-model conditions and let
+\(\lambda_n=\max_k\lambda_{n,k}\).  For simplicity write the parameter vector as
+\(\theta\) and consider a lasso penalty on selected coordinates.  If
+\(\lambda_n/\sqrt n\to\lambda\in[0,\infty)\), then
+\[
+    \sqrt n(\hat\theta_{n,\lambda}-\theta_0)
+\]
+converges to the maximizer of
+\[
+    u^\top Z-\frac12 u^\top I(\theta_0)u
+    -
+    \lambda
+    \sum_{j\in\mathcal P}
+    \left[
+        u_j\operatorname{sign}(\theta_{0j})\mathbbm 1(\theta_{0j}\neq 0)
+        +
+        |u_j|\mathbbm 1(\theta_{0j}=0)
+    \right],
+\]
+where \(Z\sim N\{0,I(\theta_0)\}\) and \(\mathcal P\) is the set of penalized
+coordinates.  In particular, if \(\lambda=0\) the usual normal limit is
+recovered, while if \(\lambda>0\) and any penalized true coefficient is zero,
+the limit has a kink and is generally not normal.
+\end{proposition}
+
+\begin{proof}
+Set \(\theta=\theta_0+u/\sqrt n\).  The local asymptotic quadratic expansion of
+the log-likelihood gives
+\[
+    \ell_n(\theta_0+u/\sqrt n)-\ell_n(\theta_0)
+    =
+    u^\top n^{-1/2}\nabla\ell_n(\theta_0)
+    -
+    \frac12 u^\top I(\theta_0)u
+    +
+    o_p(1)
+\]
+uniformly on compact sets of \(u\).  The score term converges to
+\(Z\sim N\{0,I(\theta_0)\}\).  For a penalized coordinate,
+\[
+    \lambda_n\left(
+        |\theta_{0j}+u_j/\sqrt n|-|\theta_{0j}|
+    \right)
+    \to
+    \lambda u_j\operatorname{sign}(\theta_{0j})
+\]
+if \(\theta_{0j}\neq0\), and
+\[
+    \lambda_n|u_j|/\sqrt n\to \lambda |u_j|
+\]
+if \(\theta_{0j}=0\).  Combining the likelihood and penalty expansions and
+using the argmax continuous mapping theorem yields the stated limit.
+\end{proof}
+
+\begin{corollary}
+If \(\lambda_n/\sqrt n\to0\), the fixed-dimensional lasso penalty is
+asymptotically negligible at the \(n^{-1/2}\) scale.  If
+\(\lambda_n/\sqrt n\to\lambda>0\), ordinary Hessian-based standard errors for
+the penalized estimator do not generally estimate the distribution in
+Proposition~\ref{prop:penalty_limit}.  Valid inference after variable selection
+therefore requires additional arguments, such as post-selection refitting,
+sample splitting, selective inference, bootstrap methods with label alignment,
+or a debiasing construction.
+\end{corollary}
+
+\subsection{EM monotonicity and stationary points}
+
+\begin{theorem}[Monotonicity of exact and generalized penalized EM]
+\label{thm:em_monotonicity}
+Let
+\[
+    F_n(\theta)=\ell_n(\theta)-P_n(\theta).
+\]
+If an EM update satisfies
+\[
+    Q_{P,n}(\theta^{(t+1)}\mid\theta^{(t)})
+    \ge
+    Q_{P,n}(\theta^{(t)}\mid\theta^{(t)}),
+\]
+then
+\[
+    F_n(\theta^{(t+1)})\ge F_n(\theta^{(t)}).
+\]
+\end{theorem}
+
+\begin{proof}
+For any \(\theta\) and current value \(\theta^{(t)}\), write
+\[
+    \ell_n(\theta)
+    =
+    Q_n(\theta\mid\theta^{(t)})
+    -
+    E_{\theta^{(t)}}
+    \left[
+        \log p_\theta(Z\mid Y,X)
+        \mid Y,X
+    \right],
+\]
+where \(Q_n\) is the unpenalized auxiliary function.  Subtracting the same
+identity evaluated at \(\theta^{(t)}\) yields
+\[
+    \begin{aligned}
+    F_n(\theta)-F_n(\theta^{(t)})
+    &=
+    Q_{P,n}(\theta\mid\theta^{(t)})
+    -
+    Q_{P,n}(\theta^{(t)}\mid\theta^{(t)}) \\
+    &\quad+
+    \operatorname{KL}\{
+    p_{\theta^{(t)}}(Z\mid Y,X),
+    p_\theta(Z\mid Y,X)
+    \}.
+    \end{aligned}
+\]
+The conditional Kullback--Leibler term is nonnegative.  Therefore any update
+that does not decrease \(Q_{P,n}\) cannot decrease \(F_n\).
+\end{proof}
+
+\begin{proposition}[Limit points of generalized EM]
+\label{prop:gem_stationary}
+Suppose \(\Theta_{\mathfrak m}\) is compact, \(F_n\) is continuous, and each
+component update is a closed ascent map whose fixed points are precisely the
+stationary points of \(F_n\) in the appropriate smooth or subgradient sense.
+Then every accumulation point of the generalized EM sequence is a stationary
+point of \(F_n\).
+\end{proposition}
+
+\begin{proof}
+By Theorem~\ref{thm:em_monotonicity}, \(F_n(\theta^{(t)})\) is monotone
+nondecreasing.  Compactness and continuity imply that this sequence has finite
+limits along convergent subsequences.  Let \(\theta^\star\) be an accumulation
+point.  If \(\theta^\star\) were not stationary, the closed ascent property
+would give a neighborhood of \(\theta^\star\) in which one full generalized EM
+update increases \(F_n\) by at least some positive amount.  A subsequence
+entering this neighborhood would then force the monotone objective sequence to
+increase beyond its limiting value, a contradiction.  Hence every accumulation
+point is stationary.
+\end{proof}
+
+\subsection{BIC in the regular fixed-candidate regime}
+
+\begin{proposition}[Regular BIC consistency, excluding singular overfitting]
+\label{prop:bic_regular}
+Consider a finite collection of candidate models.  Suppose the true model is in
+the collection, all candidates satisfy the regular fixed-model assumptions, all
+incorrect non-nested candidates have a positive Kullback--Leibler gap from the
+truth, and any larger model containing the truth is regular with ordinary
+Wilks-type \(O_p(1)\) likelihood gain.  Then BIC selects the smallest true model
+with probability tending to one.
+\end{proposition}
+
+\begin{proof}
+For an incorrect model, the maximized average log-likelihood converges to its
+pseudo-true population value, which is smaller than the true model value by a
+positive Kullback--Leibler gap.  Hence its BIC exceeds the true model BIC by an
+order \(n\) term with probability tending to one.  For a regular overfitted
+model containing the truth, the maximized log-likelihood gain over the smallest
+true model is \(O_p(1)\), while the BIC penalty difference is
+\((a_{\mathrm{large}}-a_{\mathrm{true}})\log n\to\infty\).  Thus regular
+overfitted models are rejected with probability tending to one.
+\end{proof}
+
+\begin{remark}
+Proposition~\ref{prop:bic_regular} does not cover the hardest cases for the
+present paper: overfitted mixtures, zero mixing weights, coinciding components,
+and nested families such as Poisson as a boundary or limiting case of negative
+binomial.  These are singular model-selection problems.  The empirical BIC
+search used below should therefore be interpreted as a practical selection
+procedure unless a separate singular-learning or problem-specific selection
+theory is supplied \citep{keribin2000order,drton2017sbic}.
+\end{remark}

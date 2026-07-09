@@ -1,0 +1,11 @@
+criterion,example_id,n,K,families,count,avg_rank,avg_test_ll,true_hits,equiv_hits
+Pred,1,1500,3,student_t + skew_normal + gaussian,94,6.053191489361702,-1.853462666324862,0,0
+Pred,1,1500,2,student_t + gaussian,93,2.4838709677419355,-1.853050091315077,93,93
+Pred,1,1500,2,student_t + skew_normal,93,2.5591397849462365,-1.8529638503905295,0,0
+Pred,1,1500,2,student_t + student_t,93,3.6666666666666665,-1.853600562935006,0,93
+Pred,1,1500,3,student_t + gaussian + gaussian,93,6.139784946236559,-1.8530147472417897,0,0
+Pred,1,1500,3,student_t + gaussian + skew_normal,92,6.489130434782608,-1.8537589102169627,0,0
+Pred,1,1500,3,student_t + student_t + gaussian,76,5.828947368421052,-1.8536640458201574,0,0
+Pred,1,1500,3,student_t + gaussian + student_t,74,6.756756756756757,-1.8554623720449042,0,0
+Pred,1,1500,3,student_t + skew_normal + skew_normal,72,6.583333333333333,-1.8537973540365615,0,0
+Pred,1,1500,3,student_t + skew_normal + student_t,64,6.875,-1.85233484346916,0,0

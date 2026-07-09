@@ -1,0 +1,11 @@
+criterion,example_id,n,K,families,count,avg_rank,avg_bic,true_hits,equiv_hits
+BIC,1,1500,2,student_t + gaussian,100,1.01,5634.928433928271,100,100
+BIC,1,1500,2,student_t + student_t,100,2.43,5641.59291889967,0,100
+BIC,1,1500,2,student_t + skew_normal,100,2.7,5642.241685039206,0,0
+BIC,1,1500,3,student_t + gaussian + gaussian,96,7.208333333333333,5683.414086450674,0,0
+BIC,1,1500,2,gaussian + student_t,95,4.652631578947369,5664.096468923201,95,95
+BIC,1,1500,2,skew_normal + student_t,88,6.215909090909091,5668.398952005798,0,0
+BIC,1,1500,2,gaussian + gaussian,58,5.120689655172414,5660.158360564314,0,0
+BIC,1,1500,3,student_t + gaussian + student_t,50,7.88,5700.4381261245835,0,0
+BIC,1,1500,3,student_t + student_t + gaussian,50,7.9,5693.260529788015,0,0
+BIC,1,1500,2,skew_normal + gaussian,48,6.916666666666667,5663.853030594158,0,0

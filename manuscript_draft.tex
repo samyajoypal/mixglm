@@ -1,0 +1,582 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,amsfonts}
+\usepackage{algorithmic,algorithm}
+\usepackage{bbm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage[authoryear,round]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{url}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{remark}{Remark}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\E}{\mathbb E}
+\newcommand{\Var}{\operatorname{Var}}
+\setlength{\emergencystretch}{2em}
+
+\title{Mixtures of Generalized Regression Models with\\
+Component-Specific Response Families}
+\author{Samyajoy Pal}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Finite mixtures of generalized linear model (GLM) regressions usually vary regression
+parameters across latent components while retaining one response family for all
+components.  This restriction can confound latent heterogeneity in covariate
+effects with heterogeneity in tail weight, dispersion, skewness, or zero
+inflation.  We introduce a generalized regression-mixture framework in which each component
+may have its own response family, link, nuisance parameters, and sparse
+regression vector.  Estimation uses a penalized generalized
+expectation-maximization (EM) algorithm, and the number and composition of
+components are selected from support-compatible family tuples by exhaustive or
+beam search using the Bayesian information criterion (BIC).  For a fixed
+regular family tuple, we establish identifiability, consistency and asymptotic
+normality, characterize the local limit under lasso penalization, and prove
+generalized-EM monotonicity.  We derive the observed information through Louis' identity and
+provide closed-form derivative blocks for fourteen continuous, positive,
+binary, count, zero-inflated, and skew families.  Simulations show increasing
+recovery of non-identical family structures, substantial reductions in false
+selection under componentwise penalization, and close agreement between
+analytical Louis and numerical-Hessian standard errors.  Applications to
+Parkinson's telemonitoring and RAND health-utilization data identify
+non-identical mixtures.  In the RAND analysis, a Poisson--negative-binomial
+mixture is selected in three independent splits and in the full sample; a
+selection-aware bootstrap supports a stable, strongly overdispersed minority
+component.  We state explicitly the regularity boundary between fixed-model
+likelihood inference and the nonregular problems created by family search,
+component selection, and penalization.
+\end{abstract}
+
+\noindent\textbf{Keywords:} finite mixture regression; generalized regression
+model; heterogeneous response families; penalized expectation-maximization;
+variable selection; Louis information; model selection.
+
+\section{Introduction}
+\label{sec:introduction}
+
+Finite mixture models provide a natural representation of unobserved
+heterogeneity: each observation arises from one of several latent
+subpopulations, and the observed law averages over the unknown membership
+\citep{mclachlan2000finite}.  Mixtures of regressions extend this principle by
+allowing the regression relationship itself to vary across latent components.
+In parallel, generalized linear models (GLMs) unify regression for continuous,
+binary, count, and positive responses through a response family and link
+function \citep{nelder1972glm,mccullagh1989glm}.  Their combination has become
+an important tool for latent-class regression, clustering, and overdispersion
+\citep{leisch2004flexmix,grun2007fitting,grun2008finite}.
+We use \emph{generalized regression} in the broader link-based sense:
+classical exponential-family GLMs are included, while Student-$t$, lognormal,
+and skew-normal components extend beyond the strict GLM class.
+
+Most finite mixtures of GLMs nevertheless impose a common response family
+across components.  Components may have different intercepts, regression
+coefficients, or dispersion parameters, but all are Gaussian, all are Poisson,
+or all are negative binomial.  This convention is computationally convenient,
+yet it is scientifically restrictive.  A count population may contain a
+regular-use subpopulation with approximately Poisson variation and a smaller
+subpopulation with severe residual overdispersion.  A continuous response may
+combine a central approximately symmetric group with a heavy-tailed or skewed
+group.  Adding more components from one family can approximate such behavior,
+but it also confounds the number of latent subpopulations with the shape needed
+to accommodate misspecification.
+
+Several neighboring literatures address parts of this problem.  Flexible
+mixture-regression software permits modular component models
+\citep{leisch2004flexmix,grun2007fitting}; mixture-of-experts models allow
+covariate-dependent routing among local predictors \citep{jacobs1991experts};
+and penalized mixture regressions allow component-specific variable selection
+\citep{khalili2007variable,stadler2010l1}.  Robust, skew, zero-inflated, and
+overdispersed mixtures relax particular distributional assumptions
+\citep{azzalini1985skew,lambert1992zip}.  What remains comparatively
+underdeveloped is an integrated regression framework that searches over
+\emph{non-identical} response-family tuples, performs sparse estimation within
+the selected components, and supplies a common observed-information calculation
+despite family-specific nuisance parameters.
+
+This paper makes five contributions.  First, we formulate a mixture of
+generalized regression models in which response families, links, nuisance
+parameters, and coefficient supports may differ by component.  Second, we
+develop a penalized generalized expectation-maximization algorithm and a
+support-aware search over
+the number and composition of components.  Third, for a fixed regular family
+tuple we give a careful likelihood theory: identifiability, existence and
+consistency of the maximum likelihood estimator, asymptotic normality,
+generalized-EM monotonicity, and the local effect of lasso penalization.  Fourth,
+we combine Louis' identity \citep{louis1982information} with family-specific
+derivative blocks, avoiding a large numerical Hessian for the families used in
+our experiments.  Fifth, we evaluate structural recovery, prediction,
+component-specific sparsity, standard errors, and coverage in simulations and
+in continuous and count applications.
+
+The scope of the theory is deliberate.  Finite mixtures are singular when
+components coincide, weights vanish, or an overfitted model contains the truth;
+family comparisons may also meet at boundaries, as Poisson does with negative
+binomial.  Ordinary fixed-dimensional Wald theory does not cover these cases,
+nor does it automatically survive lasso selection
+\citep{knight2000asymptotics,drton2017sbic}.  We therefore distinguish
+fixed-model likelihood inference from the empirical family search and use a
+selection-aware bootstrap in the principal count application.  This distinction
+is not merely technical: it prevents a computationally convenient standard
+error from being given an inferential interpretation it does not possess.
+
+The remainder of the paper is organized as follows.  Sections
+\ref{sec:methodology} and \ref{sec:theory} present the model, estimation,
+search, and theory.  Section~\ref{sec:results} reports simulations and two
+applications.  Section~\ref{sec:discussion} discusses the implications and
+limitations.  Appendix~\ref{app:louis_mstep} gives the family-level analytical
+Louis blocks and weighted M-step equations.  Complete simulation settings and
+additional application tables are provided in the Supplementary Material.
+
+\input{methods_theory_rewrite}
+
+\section{Results}
+\label{sec:results}
+
+The empirical work is organized to answer four questions: whether
+non-identical family tuples can be recovered, whether penalization gives useful
+component-specific sparsity, whether the analytical Louis information behaves
+as expected in regular fitted models, and whether real data exhibit the kind of
+distributional heterogeneity that motivates the framework.
+
+\subsection{Simulation study}
+\label{sec:simulation}
+
+The simulation study separates structural model selection, sparse coefficient
+recovery, and fixed-model inference into three scenarios.  This separation is
+important because the best criterion for recovering a generative family tuple
+need not coincide with the best criterion for conditional-mean prediction or
+variable selection.
+
+\subsubsection{Design}
+
+The simulations examine three distinct questions: recovery of the family tuple,
+component-specific variable selection, and fixed-model Wald inference.  Each
+configuration uses 100 Monte Carlo replications.  The four data-generating
+models are Gaussian--Student-$t$, Gamma--lognormal, Poisson--negative binomial
+with quadratic variance (NB2), and Poisson--zero-inflated Poisson (ZIP)
+mixtures.  Scenario A searches over
+support-compatible candidates with one to three components at
+\(n\in\{500,1000,1500\}\).  Scenario B fixes the true tuple and compares no
+penalty, lasso, and elastic net at \(n=1000\) with 20 coefficients per
+component.  Scenario C fixes the true tuple, fits the unpenalized model, and
+compares analytical Louis information with a central numerical Hessian.
+
+An independent test sample of size 2000 is used for predictive log likelihood.
+We distinguish strict family recovery from equivalence-class recovery.  Strict
+recovery requires the selected unordered tuple to match the data-generating
+tuple exactly.  Equivalence-class recovery recognizes scientifically equivalent
+or limiting representations: a Student-\(t\) with large degrees of freedom can
+approximate a Gaussian component; NB2 contains a Poisson-like boundary as
+\(\alpha\to0\); and zero-inflated count families reduce toward ordinary count
+families as the inflation probability approaches zero.  The equivalence rules
+used for the reported BIC family-match summaries are fixed before examining
+the results and are listed in Supplementary Table~S2.  Complete coefficients,
+nuisance parameters, tuning grids, initialization rules, and random seeds are
+given in Supplementary Section~S2.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/simulation_sample_size.pdf}
+\caption{Scenario A and C sample-size behavior.  The upper panels show
+equivalence-class family recovery and held-out log score for the
+BIC-selected model; the lower panels show analytical-Louis mean absolute bias
+and nominal 95\% Wald coverage.  Scenario A did not save root mean squared
+error by sample size, so the prediction panel reports the saved held-out log
+score.}
+\label{fig:simulation_sample_size}
+\end{figure}
+
+\subsubsection{Family-tuple recovery and predictive leaderboards}
+
+Table~\ref{tab:model_selection} summarizes structural recovery.  Strict
+recovery of Gaussian--Student-$t$ increases from 0.75 to 0.99, while recovery of
+the more overlapping Gamma--lognormal pair increases from 0.56 to 0.81.  The
+Poisson--ZIP tuple is recovered in 99--100\% of replications.  For
+Poisson--NB2, strict recovery is zero because the selected representation is
+typically NB2--NB2 with one dispersion near the Poisson boundary; recovery of
+the corresponding equivalence class increases from 0.48 to 0.98.
+
+\begin{table}[t]
+\centering
+\caption{Scenario A: family-tuple recovery and top-ten inclusion rates.  The
+equivalence rate accounts for the boundary representations described in the
+text.  Prediction ranks use held-out average log likelihood.}
+\label{tab:model_selection}
+\small
+\begin{tabular}{llrrrr}
+\toprule
+Generating tuple & \(n\) & Strict & Equivalent & BIC top 10 & Prediction top 10 \\
+\midrule
+Gaussian--Student-\(t\) & 500  & .75 & .75 & 1.00 & 1.00 \\
+ & 1000 & .96 & .96 & 1.00 & .99 \\
+ & 1500 & .99 & .99 & 1.00 & .98 \\
+Gamma--lognormal & 500  & .56 & .56 & 1.00 & .98 \\
+ & 1000 & .68 & .68 & .98 & .98 \\
+ & 1500 & .81 & .81 & .95 & .95 \\
+Poisson--NB2 & 500  & .00 & .48 & 1.00 & 1.00 \\
+ & 1000 & .00 & .88 & 1.00 & 1.00 \\
+ & 1500 & .00 & .98 & 1.00 & 1.00 \\
+Poisson--ZIP & 500  & 1.00 & 1.00 & 1.00 & 1.00 \\
+ & 1000 & .99 & .99 & 1.00 & 1.00 \\
+ & 1500 & .99 & .99 & 1.00 & 1.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The BIC winner is also the held-out likelihood winner in only 18--72\% of
+replications, depending on the design and sample size.  This disagreement is
+expected: BIC targets a parsimonious generative representation, whereas
+held-out likelihood can favor a nearby, more flexible candidate.  The
+leaderboard result is more informative than exact agreement: the true or
+equivalent tuple appears among the ten best models under both criteria with
+probability at least 0.95 in all reported settings.
+
+\subsubsection{Component-specific variable selection}
+
+Table~\ref{tab:variable_selection} reports Scenario B.  The unpenalized model
+retains virtually every inactive coefficient.  Lasso sharply reduces false
+selection while retaining most signals: its true-positive rate ranges from
+0.717 to 1.000 and its false-positive rate from 0.152 to 0.297.  Elastic net is
+less sparse and retains slightly more signal in the Gamma--lognormal and
+Poisson--ZIP designs.  The Gamma--lognormal example exposes the main trade-off:
+lasso gives the cleanest support but loses held-out likelihood relative to the
+dense fit.  Penalization should therefore be viewed as structural
+regularization, not as a guarantee of improved point prediction.
+
+\begin{table}[t]
+\centering
+\caption{Scenario B: variable-selection performance at \(n=1000\).  TPR,
+FPR, and FDR are true-positive, false-positive, and false-discovery rates,
+respectively.
+Selected is the mean total model size across two components.}
+\label{tab:variable_selection}
+\small
+\begin{tabular}{llrrrrr}
+\toprule
+Generating tuple & Penalty & TPR & FPR & FDR & Selected & Test log score \\
+\midrule
+Gaussian--Student-\(t\) & None & 1.000 & .998 & .750 & 39.95 & -1.919 \\
+ & Lasso & 1.000 & .222 & .388 & 16.66 & -1.915 \\
+ & Elastic net & 1.000 & .524 & .602 & 25.72 & -1.917 \\
+Gamma--lognormal & None & 1.000 & .995 & .749 & 39.84 & -1.152 \\
+ & Lasso & .717 & .152 & .289 & 11.74 & -1.170 \\
+ & Elastic net & .766 & .276 & .494 & 15.93 & -1.165 \\
+Poisson--ZIP & None & 1.000 & .997 & .749 & 39.92 & -2.477 \\
+ & Lasso & .975 & .297 & .452 & 18.67 & -2.473 \\
+ & Elastic net & .985 & .383 & .520 & 21.33 & -2.473 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/variable_selection.pdf}
+\caption{Scenario B component-specific variable selection.  The unpenalized
+fit retains nearly all inactive coefficients, whereas lasso and elastic net
+substantially reduce false-positive and false-discovery rates while preserving
+most active coefficients.}
+\label{fig:variable_selection}
+\end{figure}
+
+\subsubsection{Analytical Louis inference}
+
+Analytical Louis and numerical-Hessian summaries agree to the displayed
+precision in every Scenario C configuration, and both calculations succeed in
+all replications.  Table~\ref{tab:louis_coverage} reports the analytical
+results.  Coverage approaches 0.95 in the Gaussian--Student-$t$ design and
+stays between 0.933 and 0.943 for Poisson--ZIP.  Gamma--lognormal has persistent
+coverage near 0.91 despite agreement between the two information calculations.
+We interpret this as finite-sample undercoverage caused by overlapping
+positive-support components, rather than a derivative error.  Bias, standard
+errors, and interval length decrease with sample size.
+
+\begin{table}[t]
+\centering
+\caption{Scenario C: analytical Louis inference across regression
+coefficients.  SE denotes standard error, and intervals are nominal 95\% Wald
+intervals.}
+\label{tab:louis_coverage}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Generating tuple & \(n\) & Mean absolute bias & Mean SE & Coverage & CI length \\
+\midrule
+Gaussian--Student-\(t\) & 500  & .075 & .093 & .937 & .363 \\
+ & 1000 & .052 & .065 & .948 & .254 \\
+ & 1500 & .044 & .054 & .952 & .213 \\
+Gamma--lognormal & 500  & .049 & .043 & .907 & .168 \\
+ & 1000 & .037 & .030 & .910 & .119 \\
+ & 1500 & .034 & .025 & .909 & .097 \\
+Poisson--ZIP & 500  & .060 & .071 & .943 & .280 \\
+ & 1000 & .041 & .049 & .933 & .192 \\
+ & 1500 & .032 & .039 & .938 & .151 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Applications}
+\label{sec:applications}
+
+The two applications are reported using the same empirical template.  For each
+dataset we summarize the model-search leaderboard, held-out log score,
+root mean squared error (RMSE), mean absolute error (MAE), fitted mixture
+weights, and component-specific active sets.  The RAND analysis additionally
+includes a participant bootstrap because it is the stronger independent count
+example and has a final fixed family pair validated across splits.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/application_leaderboards.pdf}
+\caption{Application leaderboards by BIC.  Bars show the BIC difference from
+the best converged model in each application; blue bars are non-identical
+family tuples and gray bars are identical-family tuples.  BIC denotes the
+Bayesian information criterion.}
+\label{fig:application_leaderboards}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/application_supports.pdf}
+\caption{Component-specific active supports for the BIC-selected application
+models.  Dark cells indicate selected covariates.  The RAND support is
+intercept-only in the NB2 component, while the Parkinson fit has partially
+shared and partially component-specific voice-measure supports.}
+\label{fig:application_supports}
+\end{figure}
+
+\subsubsection{Parkinson's telemonitoring}
+
+The Parkinson's telemonitoring data contain 5,875 home voice recordings from
+42 participants with early-stage Parkinson's disease
+\citep{uci2009parkinsons,tsanas2010parkinsons}.  The response is the logarithm
+of total Unified Parkinson's Disease Rating Scale (UPDRS).  Candidate predictors
+include age, sex, time since recruitment, and 16 jitter, shimmer, noise, and
+nonlinear voice measures.  We searched Gaussian, Student-$t$, and skew-normal
+families with one to three components and a nine-value penalty grid.  A random
+subset of 2,000 recordings was used for fitting and 1,000 for evaluation.
+Consequently, the reported prediction scores assess new recordings from the
+observed cohort rather than generalization to unseen participants.
+
+Among 319 converged candidate fits, BIC selected a three-component
+Student-$t$--skew-normal--skew-normal model with weights
+\((0.475,0.229,0.296)\).  Its BIC was 1452.2, an improvement of 416.4 over
+the best one-component model and 43.4 over the best converged identical-family
+mixture.  The selected components retained 14, 12, and 16 predictors.  Eleven
+predictors were common to all components, while six entered only a subset.
+The differences involved jitter and shimmer summaries in particular: the third
+component retained RAP, PPQ5, and DDP jitter measures, whereas the second
+component omitted them and retained a smaller voice-feature set.
+
+\begin{table}[t]
+\centering
+\caption{Parkinson's analysis: representative converged models.  SN denotes
+skew normal.  Log score, RMSE, and MAE are evaluated on 1,000 held-out
+recordings.}
+\label{tab:parkinsons}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrrrr}
+\toprule
+Role & Family tuple & \(K\) & \(\lambda\) & BIC & Log score & RMSE/MAE & Weights & Active counts \\
+\midrule
+BIC winner & Student-\(t\)+SN+SN & 3 & 20 & 1452.2 & -297.3 & .392/.305 & .475/.229/.296 & 14/12/16 \\
+Best identical BIC & Gaussian+Gaussian+Gaussian & 3 & 20 & 1495.6 & -287.3 & .385/.300 & .442/.079/.479 & 13/13/14 \\
+Best one component & Student-\(t\) & 1 & 20 & 1868.6 & -441.3 & .384/.296 & 1.000 & 16 \\
+Best log score & Gaussian+Gaussian+SN & 3 & 20 & 1503.0 & -286.8 & .385/.300 & .079/.440/.481 & 13/13/14 \\
+Best RMSE & Gaussian+Student-\(t\) & 2 & 5 & 1818.3 & -402.1 & .382/.296 & .667/.333 & 17/18 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+The BIC and held-out likelihood leaders are both non-identical, although they
+select different tuples.  Mean prediction tells a weaker story: the best RMSE
+improves only marginally on simpler models.  The application therefore supports
+distributional heterogeneity and component-specific support more clearly than
+it supports a large gain in conditional-mean prediction.
+
+\subsubsection{RAND health-utilization counts}
+
+The RAND Health Insurance Experiment data contain medical utilization,
+insurance, demographic, and health-status variables
+\citep{deb2002health,cameron2005microeconometrics}.  To avoid repeated-record
+dependence, we retained the earliest record for each of 5,912 participants and
+modeled the number of non-physician visits.  The search included Poisson, NB2,
+ZIP, and ZINB families; one to three components; ten penalty values; and two
+initialization schemes.  Fifty predictors were screened within each training
+sample.  We performed three independent 80/20 participant splits and then an
+exhaustive fit to all participants.
+
+The Poisson--NB2 tuple was the BIC winner in every split
+(Table~\ref{tab:rand_splits}).  Its average BIC advantage was 429.0 over the
+best one-component model and 9.77 over the best identical-family mixture.
+Weights were stable at approximately 0.83 and 0.17.  Held-out log likelihood
+improved substantially over the one-component model but was essentially tied
+with NB2--NB2.  RMSE and MAE did not improve, underscoring that the gain concerns
+the predictive distribution rather than its mean.
+
+\begin{table}[t]
+\centering
+\caption{RAND split validation for the BIC-selected Poisson--NB2 mixture.
+Log score is held-out average log likelihood per participant.  The BIC
+improvement columns are positive when Poisson--NB2 improves on the indicated
+comparator.}
+\label{tab:rand_splits}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{rrrrrrrrr}
+\toprule
+Split & \(\lambda\) & BIC & vs. one component & vs. identical &
+Log score & RMSE/MAE & Weights & Active counts \\
+\midrule
+1 & 50  & 6434.9 & 396.6 & 14.5 & -.642 & 3.006/.844 & .831/.169 & 12/0 \\
+2 & 100 & 6472.1 & 483.1 & 11.3 & -.628 & 2.842/.867 & .831/.169 & 4/0 \\
+3 & 100 & 6353.0 & 407.0 & 3.5  & -.683 & 1.926/.808 & .836/.164 & 5/0 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+In the full-data search, Poisson--NB2 again ranked first (BIC 7950.6), followed
+by Poisson--ZINB (7954.4) and NB2--NB2 (7955.2).  The best one-component model
+had BIC 8504.9.  In the NB2--NB2 comparator, the first estimated dispersion was
+\(\exp(-8.52)\), effectively the Poisson boundary.  Thus the selected tuple
+is best interpreted as a parsimonious Poisson-like majority component plus a
+strongly overdispersed NB2 minority, not as proof that the broader NB2 family
+cannot represent both groups.
+
+The full-data penalized fit selected age, child status, disease burden, Black
+race, log coinsurance, and the site-3 indicator in the Poisson component; the
+NB2 component was intercept-only.  An unpenalized refit conditional on that
+support gave weights \((0.841,0.159)\) and NB2 dispersion 10.36.  The reduced
+analytical Louis information had dimension and rank 10, minimum eigenvalue
+1.28, and condition number 1439.  Conditional Louis intervals excluded zero
+for all six coefficients, but those intervals do not account for the selected
+support.
+
+We therefore used 500 participant bootstrap samples as the primary uncertainty
+analysis.  Each sample repeated predictor screening, penalty tuning, support
+selection, and the constrained post-lasso refit while holding the independently
+validated family tuple fixed.  All 500 runs completed.  The minority weight had
+a percentile interval of \((0.132,0.191)\), and NB2 dispersion had interval
+\((4.33,12.16)\).  Table~\ref{tab:rand_bootstrap} shows that age and site 3
+were the most stable covariates.  Intervals include zero when the resampled
+selection pipeline omits a variable; log coinsurance also showed sign
+instability.
+
+\begin{table}[t]
+\centering
+\caption{RAND selection-aware bootstrap for coefficients in the Poisson
+component.  Bootstrap SE denotes bootstrap standard error.  Intervals are
+percentile intervals from the complete resampled selection-and-refit pipeline.}
+\label{tab:rand_bootstrap}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Covariate & Selection frequency & Estimate & Bootstrap SE & 95\% interval \\
+\midrule
+Age & 1.000 & .221 & .079 & (.094, .400) \\
+Site 3 & .988 & .210 & .058 & (.003, .247) \\
+Log coinsurance & .886 & -.319 & .148 & (-.369, .147) \\
+Disease burden & .868 & .127 & .045 & (.000, .152) \\
+Child & .796 & -.191 & .173 & (-.288, .000) \\
+Black & .682 & -.136 & .084 & (-.254, .000) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Support selection was less stable than family selection.  The bootstrap chose
+\(\lambda=50\) in 67.4\% of samples and \(\lambda=100\) in 19.6\%, and
+the median active-set sizes were 16 and 2 rather than the full-data 6 and 0.
+Accordingly, the six-variable support is a parsimonious full-data
+representation, not a uniquely determined scientific model.
+
+\section{Discussion and conclusions}
+\label{sec:discussion}
+
+Allowing response families to vary across latent regression components
+addresses a simple but consequential limitation of conventional mixture GLMs.
+In both simulations and applications, non-identical tuples distinguish
+heterogeneity in regression effects from heterogeneity in dispersion, skewness,
+tail weight, and zero inflation.  The framework remains modular: component
+families contribute their own likelihood, link, nuisance update, and derivative
+block, while EM responsibilities and Louis' missing-information correction are
+shared.
+
+The numerical results support three conclusions.  First, family-tuple recovery
+improves with sample size, but exact labels are not always the right target when
+families meet at a boundary.  Second, componentwise penalization can greatly
+reduce false selection, although sparse support and optimal prediction need not
+coincide.  Third, analytical Louis information reproduces numerical-Hessian
+inference while avoiding a fragile high-dimensional differentiation step.  The
+RAND analysis combines these points: a Poisson-like majority and an
+overdispersed minority are reproducible across splits, whereas individual
+covariates have varying selection stability.
+
+Several limitations define useful directions for further work.  The regular
+theory conditions on a fixed, identifiable family tuple with interior
+parameters and nonsingular information.  It does not justify ordinary Wald
+inference after selecting the number of components, family tuple, or active
+set.  Singular criteria, selective inference, and family-selection bootstrap
+procedures are important extensions \citep{drton2017sbic,leeb2005selection}.
+The RAND bootstrap repeats variable selection but conditions on the family pair;
+its intervals should be read accordingly.
+
+The empirical analyses use a common penalty parameter across components.
+Because effective component sample sizes can differ, a common absolute penalty
+may shrink a small component more strongly.  Component-specific or
+effective-sample-size-adjusted tuning is a natural extension.  The
+intercept-only NB2 support in the full RAND fit is therefore not evidence that
+all measured covariates are irrelevant in that component; the bootstrap
+selection frequencies convey the appropriate uncertainty.
+
+The Parkinson application contains repeated recordings.  Its recording-level
+split measures interpolation to additional recordings from the observed
+participant cohort and should not be interpreted as new-participant validation.
+Grouped likelihoods, participant-level cross-validation, random effects, and
+cluster bootstrap inference would extend the model to longitudinal data.
+Finally, exhaustive family search is combinatorial and EM remains sensitive to
+local modes.  Better warm starts, branch-and-bound search, parallel screening,
+and covariate-dependent mixing weights in the spirit of mixture-of-experts
+models are promising computational developments.
+
+Within these boundaries, component-specific response families offer a useful
+middle ground between a rigid homogeneous-family mixture and a fully
+nonparametric conditional density model.  They preserve interpretable
+component regressions, permit sparse component-specific scientific summaries,
+and support likelihood-based uncertainty calculations when the fitted model is
+regular.  The central practical recommendation is equally important: report
+family selection, prediction, support stability, and fixed-model uncertainty as
+distinct objects rather than expecting one ranking or standard error to answer
+all four questions.
+
+\section*{Data and code availability}
+
+The Python implementation, simulation scripts, data-preparation scripts, job
+specifications, and processed result tables used in this paper are included in
+the accompanying reproducibility archive and the project repository at
+\url{https://github.com/samyajoypal/mixglm}.  The file
+\texttt{REPRODUCIBILITY.md} lists the source files and saved artifacts needed
+to rebuild the tables and figures.  The two applications use publicly
+available RAND Health Insurance Experiment and UCI Parkinson's telemonitoring
+data.
+
+\clearpage
+\input{appendix_louis_mstep}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
