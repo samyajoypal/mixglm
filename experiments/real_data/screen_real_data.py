@@ -263,6 +263,25 @@ def make_components(fnames: Sequence[str], lam: float) -> List[ComponentSpec]:
     return comps
 
 
+def make_masked_components(
+    fnames: Sequence[str],
+    masks: Sequence[Sequence[bool]],
+) -> List[ComponentSpec]:
+    comps: List[ComponentSpec] = []
+    for fname, mask in zip(fnames, masks):
+        fam = FAMILIES.create(fname)
+        link = LINKS.create(fam.default_link_name)
+        comps.append(
+            ComponentSpec(
+                family=fam,
+                link=link,
+                penalty=NoPenalty(),
+                coef_mask=tuple(bool(x) for x in mask),
+            )
+        )
+    return comps
+
+
 def heldout_loglik(
     model: MixtureGLM,
     y: np.ndarray,
@@ -284,6 +303,36 @@ def heldout_loglik(
     return float(np.sum(m + np.log(np.sum(np.exp(log_terms - m), axis=1, keepdims=True))))
 
 
+def prediction_summary(
+    model: MixtureGLM,
+    *,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    X_test: np.ndarray,
+    offset_test: np.ndarray | None = None,
+) -> Dict[str, Any]:
+    y_test = np.asarray(y_test, dtype=float)
+    y_pred = model.predict_mean(X_test, offset=offset_test)
+    pred_finite = bool(np.all(np.isfinite(y_pred)))
+    observed_max = max(float(np.max(y_train)), float(np.max(y_test)), 1.0)
+    baseline_mean_rmse = float(np.sqrt(np.mean((y_test - float(np.mean(y_train))) ** 2)))
+    baseline_median_mae = float(np.mean(np.abs(y_test - float(np.median(y_train)))))
+    out: Dict[str, Any] = {
+        "test_loglik": heldout_loglik(model, y_test, X_test, offset=offset_test),
+        "test_rmse": float(np.sqrt(np.mean((y_test - y_pred) ** 2))),
+        "test_mae": float(np.mean(np.abs(y_test - y_pred))),
+        "prediction_finite": pred_finite,
+        "prediction_max": float(np.max(y_pred)) if pred_finite else np.inf,
+        "prediction_q99": float(np.quantile(y_pred, 0.99)) if pred_finite else np.inf,
+        "baseline_mean_rmse": baseline_mean_rmse,
+        "baseline_median_mae": baseline_median_mae,
+    }
+    out["prediction_stable"] = bool(pred_finite and out["prediction_max"] <= 10.0 * observed_max)
+    out["rmse_skill"] = float(1.0 - out["test_rmse"] / max(baseline_mean_rmse, 1e-12))
+    out["mae_skill"] = float(1.0 - out["test_mae"] / max(baseline_median_mae, 1e-12))
+    return out
+
+
 def active_sets(model: MixtureGLM, *, threshold: float) -> List[List[int]]:
     assert model.result_ is not None
     out: List[List[int]] = []
@@ -291,6 +340,32 @@ def active_sets(model: MixtureGLM, *, threshold: float) -> List[List[int]]:
         b = np.asarray(beta, dtype=float)
         out.append([j for j in range(1, b.size) if abs(float(b[j])) > threshold])
     return out
+
+
+def active_masks(model: MixtureGLM, *, threshold: float) -> List[Tuple[bool, ...]]:
+    assert model.result_ is not None
+    masks: List[Tuple[bool, ...]] = []
+    for beta in model.result_.betas:
+        b = np.asarray(beta, dtype=float)
+        keep = np.zeros(b.size, dtype=bool)
+        keep[0] = True
+        keep[1:] = np.abs(b[1:]) > float(threshold)
+        masks.append(tuple(bool(x) for x in keep))
+    return masks
+
+
+def active_gate_summary(
+    active: Sequence[Sequence[int]],
+    *,
+    min_active_per_component: int,
+) -> Dict[str, Any]:
+    counts = [len(a) for a in active]
+    min_count = min(counts) if counts else 0
+    return {
+        "min_active_count": int(min_count),
+        "has_intercept_only_component": bool(any(c == 0 for c in counts)),
+        "passes_active_component_gate": bool(min_count >= int(min_active_per_component)),
+    }
 
 
 def active_feature_summary(
@@ -346,6 +421,49 @@ def active_summary(active: List[List[int]]) -> Dict[str, Any]:
     return {"active_counts": counts, "shared_active": shared, "symmetric_diff": sym}
 
 
+def post_lasso_refit(
+    *,
+    y_train: np.ndarray,
+    X_train: np.ndarray,
+    fnames: Sequence[str],
+    masks: Sequence[Sequence[bool]],
+    preferred_init: str,
+    seed: int,
+    max_iter: int,
+    tol: float,
+    n_starts: int,
+    offset_train: np.ndarray | None = None,
+) -> MixtureGLM:
+    init_order = list(dict.fromkeys([preferred_init, "kmeans_glm", "quantile_glm", "random"]))
+    best: MixtureGLM | None = None
+    best_loglik = -np.inf
+    for j, init_name in enumerate(init_order):
+        try:
+            model = MixtureGLM(make_masked_components(fnames, masks))
+            model.fit(
+                y_train,
+                X_train,
+                max_iter=max_iter,
+                tol=tol,
+                n_starts=n_starts,
+                seed=seed + 1000 + j,
+                init=init_name,
+                standardize=True,
+                compute_icl=True,
+                verbose=False,
+                offset=offset_train,
+            )
+            res = model.result_
+            if res is not None and res.converged and np.isfinite(res.loglik) and res.loglik > best_loglik:
+                best = model
+                best_loglik = float(res.loglik)
+        except Exception:
+            continue
+    if best is None:
+        raise RuntimeError("active-set refit failed for all initialization strategies")
+    return best
+
+
 def fit_one(
     *,
     fnames: Tuple[str, ...],
@@ -363,6 +481,10 @@ def fit_one(
     feature_names: Sequence[str] | None = None,
     offset_train: np.ndarray | None = None,
     offset_test: np.ndarray | None = None,
+    refit_active: bool = False,
+    refit_max_iter: int | None = None,
+    refit_n_starts: int | None = None,
+    min_active_per_component: int = 0,
 ) -> Dict[str, Any]:
     t0 = time.time()
     row: Dict[str, Any] = {
@@ -372,6 +494,10 @@ def fit_one(
         "nonidentical": len(set(fnames)) > 1,
         "converged": False,
         "error": "",
+        "refit_attempted": False,
+        "refit_converged": False,
+        "refit_error": "",
+        "selection_source": "penalized_fit",
     }
     try:
         model = MixtureGLM(make_components(fnames, lam))
@@ -384,59 +510,138 @@ def fit_one(
             seed=seed,
             init=init,
             standardize=True,
-            compute_icl=False,
+            compute_icl=True,
             verbose=False,
             offset=offset_train,
         )
         res = model.result_
         if res is None:
             raise RuntimeError("fit returned no result_")
+        final_obj = float(res.history.get("obj", [np.nan])[-1]) if res.history else np.nan
         row.update(
             {
                 "converged": bool(res.converged),
                 "loglik_train": float(res.loglik),
+                "penalized_objective_train": final_obj,
+                "penalty_value_train": float(res.loglik - final_obj) if np.isfinite(final_obj) else np.nan,
                 "bic": float(res.bic),
                 "aic": float(res.aic),
-                "test_loglik": heldout_loglik(model, y_test, X_test, offset=offset_test),
+                "icl": float(res.icl) if res.icl is not None else np.nan,
                 "pi": json.dumps([float(x) for x in res.pi]),
                 "extras": json.dumps(
                     [{str(k): float(v) for k, v in ex.items()} for ex in res.extras]
                 ),
             }
         )
-        y_pred = model.predict_mean(X_test, offset=offset_test)
-        pred_finite = bool(np.all(np.isfinite(y_pred)))
-        row["test_rmse"] = float(np.sqrt(np.mean((np.asarray(y_test, dtype=float) - y_pred) ** 2)))
-        row["test_mae"] = float(np.mean(np.abs(np.asarray(y_test, dtype=float) - y_pred)))
-        row["prediction_finite"] = pred_finite
-        row["prediction_max"] = float(np.max(y_pred)) if pred_finite else np.inf
-        row["prediction_q99"] = float(np.quantile(y_pred, 0.99)) if pred_finite else np.inf
-        observed_max = max(float(np.max(y_train)), float(np.max(y_test)), 1.0)
-        row["prediction_stable"] = bool(pred_finite and row["prediction_max"] <= 10.0 * observed_max)
-        train_mean = float(np.mean(y_train))
-        train_median = float(np.median(y_train))
-        baseline_mean_rmse = float(
-            np.sqrt(np.mean((np.asarray(y_test, dtype=float) - train_mean) ** 2))
+        row.update(
+            prediction_summary(
+                model,
+                y_train=y_train,
+                y_test=y_test,
+                X_test=X_test,
+                offset_test=offset_test,
+            )
         )
-        baseline_median_mae = float(
-            np.mean(np.abs(np.asarray(y_test, dtype=float) - train_median))
-        )
-        row["baseline_mean_rmse"] = baseline_mean_rmse
-        row["baseline_median_mae"] = baseline_median_mae
-        row["rmse_skill"] = float(1.0 - row["test_rmse"] / max(baseline_mean_rmse, 1e-12))
-        row["mae_skill"] = float(1.0 - row["test_mae"] / max(baseline_median_mae, 1e-12))
         active = active_sets(model, threshold=active_threshold)
+        row.update(active_gate_summary(active, min_active_per_component=min_active_per_component))
         row.update(active_summary(active))
         row.update(active_feature_summary(model, active, feature_names))
         row["active_counts"] = json.dumps(row["active_counts"])
         row["n_iter"] = int(res.n_iter)
         row["min_pi"] = float(np.min(res.pi))
+        row["penalized_active_bic"] = float(row["bic"])
+        row["penalized_active_aic"] = float(row["aic"])
+        row["selection_bic"] = float(row["bic"])
+        row["selection_aic"] = float(row["aic"])
+        row["selection_icl"] = float(row["icl"])
+        row["selection_loglik_train"] = float(row["loglik_train"])
+        row["selection_test_loglik"] = float(row["test_loglik"])
+        row["selection_test_rmse"] = float(row["test_rmse"])
+        row["selection_test_mae"] = float(row["test_mae"])
+        row["selection_prediction_finite"] = bool(row["prediction_finite"])
+        row["selection_prediction_stable"] = bool(row["prediction_stable"])
+
+        if bool(refit_active) and float(lam) > 0.0 and bool(res.converged):
+            row["refit_attempted"] = True
+            masks = active_masks(model, threshold=active_threshold)
+            try:
+                refit = post_lasso_refit(
+                    y_train=y_train,
+                    X_train=X_train,
+                    fnames=fnames,
+                    masks=masks,
+                    preferred_init=init,
+                    seed=seed,
+                    max_iter=int(refit_max_iter or max_iter),
+                    tol=tol,
+                    n_starts=int(refit_n_starts or n_starts),
+                    offset_train=offset_train,
+                )
+                refit_res = refit.result_
+                if refit_res is None:
+                    raise RuntimeError("refit returned no result_")
+                refit_pred = prediction_summary(
+                    refit,
+                    y_train=y_train,
+                    y_test=y_test,
+                    X_test=X_test,
+                    offset_test=offset_test,
+                )
+                row.update(
+                    {
+                        "refit_converged": bool(refit_res.converged),
+                        "refit_loglik_train": float(refit_res.loglik),
+                        "refit_bic": float(refit_res.bic),
+                        "refit_aic": float(refit_res.aic),
+                        "refit_icl": float(refit_res.icl) if refit_res.icl is not None else np.nan,
+                        "refit_test_loglik": float(refit_pred["test_loglik"]),
+                        "refit_test_rmse": float(refit_pred["test_rmse"]),
+                        "refit_test_mae": float(refit_pred["test_mae"]),
+                        "refit_prediction_finite": bool(refit_pred["prediction_finite"]),
+                        "refit_prediction_stable": bool(refit_pred["prediction_stable"]),
+                        "refit_pi": json.dumps([float(x) for x in refit_res.pi]),
+                        "refit_extras": json.dumps(
+                            [{str(k): float(v) for k, v in ex.items()} for ex in refit_res.extras]
+                        ),
+                        "selection_source": "active_set_refit",
+                        "selection_bic": float(refit_res.bic),
+                        "selection_aic": float(refit_res.aic),
+                        "selection_icl": float(refit_res.icl) if refit_res.icl is not None else np.nan,
+                        "selection_loglik_train": float(refit_res.loglik),
+                        "selection_test_loglik": float(refit_pred["test_loglik"]),
+                        "selection_test_rmse": float(refit_pred["test_rmse"]),
+                        "selection_test_mae": float(refit_pred["test_mae"]),
+                        "selection_prediction_finite": bool(refit_pred["prediction_finite"]),
+                        "selection_prediction_stable": bool(refit_pred["prediction_stable"]),
+                    }
+                )
+            except Exception as e:
+                row["refit_error"] = str(e)[:260]
+                row["selection_source"] = "refit_failed"
+                row["selection_bic"] = np.inf
+                row["selection_aic"] = np.inf
+                row["selection_icl"] = np.inf
+                row["selection_loglik_train"] = -np.inf
+                row["selection_test_loglik"] = -np.inf
+                row["selection_test_rmse"] = np.inf
+                row["selection_test_mae"] = np.inf
+                row["selection_prediction_finite"] = False
+                row["selection_prediction_stable"] = False
+
+        row["publication_candidate"] = bool(
+            row["nonidentical"]
+            and int(row["K"]) >= 2
+            and bool(row["passes_active_component_gate"])
+        )
     except Exception as e:
         row.update(
             {
                 "loglik_train": -np.inf,
+                "penalized_objective_train": -np.inf,
+                "penalty_value_train": np.nan,
                 "bic": np.inf,
                 "aic": np.inf,
+                "icl": np.inf,
                 "test_loglik": -np.inf,
                 "test_rmse": np.inf,
                 "test_mae": np.inf,
@@ -455,6 +660,32 @@ def fit_one(
                 "active_features": "[]",
                 "active_coefficients": "[]",
                 "component_intercepts": "[]",
+                "min_active_count": 0,
+                "has_intercept_only_component": True,
+                "passes_active_component_gate": False,
+                "publication_candidate": False,
+                "penalized_active_bic": np.inf,
+                "penalized_active_aic": np.inf,
+                "selection_bic": np.inf,
+                "selection_aic": np.inf,
+                "selection_icl": np.inf,
+                "selection_loglik_train": -np.inf,
+                "selection_test_loglik": -np.inf,
+                "selection_test_rmse": np.inf,
+                "selection_test_mae": np.inf,
+                "selection_prediction_finite": False,
+                "selection_prediction_stable": False,
+                "refit_loglik_train": -np.inf,
+                "refit_bic": np.inf,
+                "refit_aic": np.inf,
+                "refit_icl": np.inf,
+                "refit_test_loglik": -np.inf,
+                "refit_test_rmse": np.inf,
+                "refit_test_mae": np.inf,
+                "refit_prediction_finite": False,
+                "refit_prediction_stable": False,
+                "refit_pi": "[]",
+                "refit_extras": "[]",
                 "shared_active": np.nan,
                 "symmetric_diff": np.nan,
                 "n_iter": 0,
@@ -481,6 +712,10 @@ def run_dataset(
     seed: int,
     active_threshold: float,
     init_strategy: str,
+    refit_active: bool,
+    refit_max_iter: int | None,
+    refit_n_starts: int | None,
+    min_active_per_component: int,
     out_dir: str,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
@@ -546,6 +781,10 @@ def run_dataset(
             feature_names=names,
             offset_train=offset_train,
             offset_test=offset_test,
+            refit_active=refit_active,
+            refit_max_iter=refit_max_iter,
+            refit_n_starts=refit_n_starts,
+            min_active_per_component=min_active_per_component,
         )
         row["dataset"] = spec.name
         rows.append(row)
@@ -556,33 +795,41 @@ def run_dataset(
 
     df = pd.DataFrame(rows)
     df.to_csv(raw_path, index=False)
-    ok = df[df["converged"] & np.isfinite(df["bic"]) & np.isfinite(df["test_loglik"])].copy()
-    ok.sort_values("bic").head(10).to_csv(bic_path, index=False)
-    ok.sort_values("test_loglik", ascending=False).head(10).to_csv(pred_path, index=False)
-    ok.sort_values("test_rmse").head(10).to_csv(rmse_path, index=False)
+    bic_col = "selection_bic" if "selection_bic" in df.columns else "bic"
+    loglik_col = "selection_test_loglik" if "selection_test_loglik" in df.columns else "test_loglik"
+    rmse_col = "selection_test_rmse" if "selection_test_rmse" in df.columns else "test_rmse"
+    ok = df[df["converged"] & np.isfinite(df[bic_col]) & np.isfinite(df[loglik_col])].copy()
+    ok.sort_values(bic_col).head(10).to_csv(bic_path, index=False)
+    ok.sort_values(loglik_col, ascending=False).head(10).to_csv(pred_path, index=False)
+    ok.sort_values(rmse_col).head(10).to_csv(rmse_path, index=False)
+    if "publication_candidate" in ok.columns:
+        ok[ok["publication_candidate"]].sort_values(bic_col).head(20).to_csv(
+            os.path.join(out_dir, f"{spec.name}_top20_publication_bic.csv"),
+            index=False,
+        )
 
     if ok.empty:
         print(f"[{spec.name}] no usable fits", flush=True)
         return df
 
-    best_bic = ok.sort_values("bic").iloc[0]
-    best_pred = ok.sort_values("test_loglik", ascending=False).iloc[0]
+    best_bic = ok.sort_values(bic_col).iloc[0]
+    best_pred = ok.sort_values(loglik_col, ascending=False).iloc[0]
     print(
         f"[{spec.name}] best BIC: {best_bic['families']} lam={best_bic['lambda']} "
-        f"BIC={best_bic['bic']:.3f} testLL={best_bic['test_loglik']:.3f} "
-        f"active={best_bic['active_counts']}",
+        f"BIC={best_bic[bic_col]:.3f} testLL={best_bic[loglik_col]:.3f} "
+        f"active={best_bic['active_counts']} source={best_bic.get('selection_source', 'penalized_fit')}",
         flush=True,
     )
     print(
         f"[{spec.name}] best pred: {best_pred['families']} lam={best_pred['lambda']} "
-        f"BIC={best_pred['bic']:.3f} testLL={best_pred['test_loglik']:.3f} "
+        f"BIC={best_pred[bic_col]:.3f} testLL={best_pred[loglik_col]:.3f} "
         f"active={best_pred['active_counts']}",
         flush=True,
     )
-    best_rmse = ok.sort_values("test_rmse").iloc[0]
+    best_rmse = ok.sort_values(rmse_col).iloc[0]
     print(
         f"[{spec.name}] best RMSE: {best_rmse['families']} lam={best_rmse['lambda']} "
-        f"BIC={best_rmse['bic']:.3f} RMSE={best_rmse['test_rmse']:.3f} "
+        f"BIC={best_rmse[bic_col]:.3f} RMSE={best_rmse[rmse_col]:.3f} "
         f"active={best_rmse['active_counts']}",
         flush=True,
     )
@@ -614,6 +861,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-starts", type=int, default=1)
     parser.add_argument("--seed", type=int, default=20260624)
     parser.add_argument("--active-threshold", type=float, default=1e-6)
+    parser.add_argument("--refit-active", action="store_true")
+    parser.add_argument("--refit-max-iter", type=int, default=None)
+    parser.add_argument("--refit-n-starts", type=int, default=None)
+    parser.add_argument("--min-active-per-component", type=int, default=0)
     parser.add_argument(
         "--init",
         default="auto",
@@ -663,6 +914,10 @@ def main() -> None:
             seed=args.seed,
             active_threshold=args.active_threshold,
             init_strategy=args.init,
+            refit_active=args.refit_active,
+            refit_max_iter=args.refit_max_iter,
+            refit_n_starts=args.refit_n_starts,
+            min_active_per_component=args.min_active_per_component,
             out_dir=args.out_dir,
         )
         all_rows.append(df)

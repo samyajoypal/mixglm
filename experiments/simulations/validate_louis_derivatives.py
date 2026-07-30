@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -46,6 +48,11 @@ def _vectorize(block):
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate analytic Louis derivative blocks.")
+    parser.add_argument("--output", default="", help="Optional CSV path for validation summary.")
+    parser.add_argument("--rel-tol", type=float, default=2e-3)
+    args = parser.parse_args()
+
     register_families()
     register_links()
 
@@ -56,6 +63,7 @@ def main() -> int:
     print()
 
     failed = False
+    rows = []
     for fam_name, link_name, y, eta, extra in CASES:
         fam = FAMILIES.create(fam_name)
         link = LINKS.create(link_name)
@@ -69,10 +77,28 @@ def main() -> int:
         vf = _vectorize(finite_diff)
         max_abs = float(np.nanmax(np.abs(va - vf))) if va.size else 0.0
         rel = max_abs / max(1.0, float(np.nanmax(np.abs(vf))) if vf.size else 1.0)
-        ok = np.isfinite(max_abs) and rel <= 2e-3
+        ok = np.isfinite(max_abs) and rel <= float(args.rel_tol)
         failed = failed or not ok
         mark = "OK" if ok else "FAIL"
         print(f"{mark:4s} {fam_name:18s} y={y:<4g} max_abs={max_abs:.3e} rel={rel:.3e}")
+        rows.append(
+            {
+                "family": fam_name,
+                "link": link_name,
+                "y": float(y),
+                "eta": float(eta),
+                "n_derivatives": int(va.size),
+                "max_abs_error": max_abs,
+                "relative_error": rel,
+                "status": mark,
+            }
+        )
+
+    if args.output:
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_csv(out_path, index=False)
+        print(f"\nSaved validation table: {out_path}")
 
     return 1 if failed else 0
 

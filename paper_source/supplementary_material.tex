@@ -7,7 +7,11 @@
 
 \title{Supplementary Material: Mixtures of Generalized Regression Models with
 Component-Specific Response Families}
-\author{Samyajoy Pal}
+\author{Samyajoy Pal\textsuperscript{1}\quad
+Dayasri Ravi\textsuperscript{2}\quad
+Rouven E. Haschka\textsuperscript{1}\\[0.75em]
+\small \textsuperscript{1}Chair of Data Analytics, Technical University of Kaiserslautern-Landau\\
+\small \textsuperscript{2}Department of Mathematics, University of Augsburg}
 \date{}
 
 \newtheorem{remark}{Remark}
@@ -544,10 +548,10 @@ For each replication, the ten best models by BIC and the ten best models by
 held-out log likelihood are retained to form the leaderboard summaries.
 
 Strict recovery requires the selected family tuple to match the true tuple up to
-label switching.  The equivalence-class summaries additionally use the rules in
-Table~\ref{tab:supp_equiv}.  These rules are used only for interpretation of
-families with nesting or boundary behavior; strict recovery is always reported
-separately in the main table.
+label permutation.  Boundary-equivalent recovery is reported separately using
+the rules in Table~\ref{tab:supp_equiv}.  These rules are used only for
+interpretation of families with nesting or boundary behavior; strict recovery is
+always reported separately in the main table.
 
 \begin{table}[htbp]
 \centering
@@ -564,7 +568,7 @@ True unordered tuple & Treated as equivalent for summary purposes \\
 \(\{\text{Poisson},\text{NB2}\}\) &
 \(\{\text{Poisson},\text{NB2}\}\), \(\{\text{NB2},\text{NB2}\}\) \\
 \(\{\text{Poisson},\text{ZIP}\}\) &
-\(\{\text{Poisson},\text{ZIP}\}\), \(\{\text{ZIP},\text{ZIP}\}\), \(\{\text{ZINB},\text{ZINB}\}\) \\
+\(\{\text{Poisson},\text{ZIP}\}\), \(\{\text{ZIP},\text{ZIP}\}\) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -603,7 +607,7 @@ Example & Component 1 coefficient vector & Component 2 coefficient vector \\
 For each replication, three penalty classes are compared: no penalty, lasso,
 and elastic net.  The lasso and elastic-net tuning grid is
 \[
-    \lambda\in\{1,2,5,10,20,50,100,200\},
+    \lambda\in\{0.25,0.5,1,2,5,10,20,50\},
 \]
 and the elastic-net mixing parameter is fixed at \(0.5\).  Within each penalty
 class, the representative model reported in the main table is the member of the

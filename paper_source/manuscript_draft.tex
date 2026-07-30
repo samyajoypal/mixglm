@@ -26,7 +26,11 @@
 
 \title{Mixtures of Generalized Regression Models with\\
 Component-Specific Response Families}
-\author{Samyajoy Pal}
+\author{Samyajoy Pal\textsuperscript{1}\quad
+Dayasri Ravi\textsuperscript{2}\quad
+Rouven E. Haschka\textsuperscript{1}\\[0.75em]
+\small \textsuperscript{1}Chair of Data Analytics, Technical University of Kaiserslautern-Landau\\
+\small \textsuperscript{2}Department of Mathematics, University of Augsburg}
 \date{}
 
 \begin{document}
@@ -41,9 +45,10 @@ effects with heterogeneity in tail weight, dispersion, skewness, or zero
 inflation.  We introduce a generalized regression-mixture framework in which each component
 may have its own response family, link, nuisance parameters, and sparse
 regression vector.  Estimation uses a penalized generalized
-expectation-maximization (EM) algorithm, and the number and composition of
-components are selected from support-compatible family tuples by exhaustive or
-beam search using the Bayesian information criterion (BIC).  For a fixed
+expectation-maximization (EM) algorithm; lasso-selected supports are
+subsequently scored by unpenalized active-set refits, and the number and
+composition of components are searched over support-compatible family tuples.
+For a fixed
 regular family tuple, we establish identifiability, consistency and asymptotic
 normality, characterize the local limit under lasso penalization, and prove
 generalized-EM monotonicity.  We derive the observed information through Louis' identity and
@@ -110,9 +115,9 @@ despite family-specific nuisance parameters.
 This paper makes five contributions.  First, we formulate a mixture of
 generalized regression models in which response families, links, nuisance
 parameters, and coefficient supports may differ by component.  Second, we
-develop a penalized generalized expectation-maximization algorithm and a
-support-aware search over
-the number and composition of components.  Third, for a fixed regular family
+develop a penalized generalized expectation-maximization algorithm, active-set
+refit scoring, and a support-aware search over the number and composition of
+components.  Third, for a fixed regular family
 tuple we give a careful likelihood theory: identifiability, existence and
 consistency of the maximum likelihood estimator, asymptotic normality,
 generalized-EM monotonicity, and the local effect of lasso penalization.  Fourth,
@@ -333,10 +338,15 @@ Poisson--ZIP & 500  & .060 & .071 & .943 & .280 \\
 
 The two applications are reported using the same empirical template.  For each
 dataset we summarize the model-search leaderboard, held-out log score,
-root mean squared error (RMSE), mean absolute error (MAE), fitted mixture
-weights, and component-specific active sets.  The RAND analysis additionally
-includes a participant bootstrap because it is the stronger independent count
-example and has a final fixed family pair validated across splits.
+root mean squared error (RMSE), mean absolute error (MAE), integrated
+completed likelihood (ICL), fitted mixture weights, and component-specific
+active sets.  Penalized candidates are reported with their screening score and,
+when available, their unpenalized active-set refit score.  We also flag selected
+models containing an intercept-only component, because such a component may
+reflect either genuine residual heterogeneity or excessive shrinkage under a
+common penalty.  The RAND analysis additionally includes a participant
+bootstrap because it is the stronger independent count example and has a final
+fixed family pair validated across splits.
 
 \begin{figure}[t]
 \centering
@@ -352,9 +362,9 @@ Bayesian information criterion.}
 \centering
 \includegraphics[width=\textwidth]{figures/application_supports.pdf}
 \caption{Component-specific active supports for the BIC-selected application
-models.  Dark cells indicate selected covariates.  The RAND support is
-intercept-only in the NB2 component, while the Parkinson fit has partially
-shared and partially component-specific voice-measure supports.}
+models.  Dark cells indicate selected non-intercept covariates.  The figure is
+used to assess whether the selected family structure is accompanied by
+meaningful component-specific covariate structure.}
 \label{fig:application_supports}
 \end{figure}
 
@@ -537,10 +547,10 @@ its intervals should be read accordingly.
 The empirical analyses use a common penalty parameter across components.
 Because effective component sample sizes can differ, a common absolute penalty
 may shrink a small component more strongly.  Component-specific or
-effective-sample-size-adjusted tuning is a natural extension.  The
-intercept-only NB2 support in the full RAND fit is therefore not evidence that
-all measured covariates are irrelevant in that component; the bootstrap
-selection frequencies convey the appropriate uncertainty.
+effective-sample-size-adjusted tuning is a natural extension.  We therefore
+report whether any selected component is intercept-only and treat such cases as
+diagnostic rather than definitive evidence that all measured covariates are
+irrelevant in that component.
 
 The Parkinson application contains repeated recordings.  Its recording-level
 split measures interpolation to additional recordings from the observed

@@ -54,24 +54,28 @@ SAMPLE_SIZES = _parse_int_list("MIXGLM_SAMPLE_SIZES", [500, 1000, 1500])
 SCENARIO_A_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_A_EXAMPLES", [1, 2, 3, 4])
 SCENARIO_B_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_B_EXAMPLES", [1, 2, 4])
 SCENARIO_C_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_C_EXAMPLES", [1, 2, 4])
-LAMBDA_GRID = _parse_float_list("MIXGLM_LAMBDA_GRID", [1, 2, 5, 10, 20, 50, 100, 200])
+LAMBDA_GRID = _parse_float_list("MIXGLM_LAMBDA_GRID", [0.25, 0.5, 1, 2, 5, 10, 20, 50])
 SCENARIO_B_N = int(os.environ.get("MIXGLM_SCENARIO_B_N", 1000))
 SCENARIO_B_P = int(os.environ.get("MIXGLM_SCENARIO_B_P", 20))
 SCENARIO_A_BEAM_WIDTH = int(os.environ.get("MIXGLM_SCENARIO_A_BEAM_WIDTH", 10))
 
-# EQUIVALENCE CLASSES FOR MODEL SELECTION
-EQUIV_CLASSES = {
+# Boundary-equivalent classes are reported separately from strict recovery.
+BOUNDARY_EQUIV_CLASSES = {
     frozenset(["poisson", "nb2"]): [frozenset(["nb2", "nb2"]), frozenset(["poisson", "nb2"])],
-    frozenset(["poisson", "zip"]): [frozenset(["zip", "zip"]), frozenset(["poisson", "zip"]), frozenset(["zinb", "zinb"])],
+    frozenset(["poisson", "zip"]): [frozenset(["zip", "zip"]), frozenset(["poisson", "zip"])],
     frozenset(["gaussian", "student_t"]): [frozenset(["student_t", "student_t"]), frozenset(["gaussian", "student_t"])],
     frozenset(["gamma", "lognormal"]): [frozenset(["gamma", "lognormal"])]
 }
 
-def is_equivalent(selected, truth):
+def is_strict_structure(selected, truth):
+    return family_signature(selected) == family_signature(truth)
+
+
+def is_boundary_equivalent(selected, truth):
     t_set = frozenset(truth)
     s_set = frozenset(selected)
-    if t_set in EQUIV_CLASSES:
-        return s_set in EQUIV_CLASSES[t_set]
+    if t_set in BOUNDARY_EQUIV_CLASSES:
+        return s_set in BOUNDARY_EQUIV_CLASSES[t_set]
     return s_set == t_set
 
 def family_signature(families):
@@ -142,6 +146,19 @@ def dataframe_to_latex(df, *, caption, label, float_format="%.3f"):
         lines.append(" & ".join(vals) + r" \\")
     lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
     return "\n".join(lines)
+
+
+def mcse_rate(x) -> float:
+    vals = np.asarray([v for v in x if np.isfinite(v)], dtype=float)
+    if vals.size == 0:
+        return np.nan
+    p = float(np.mean(vals))
+    return float(np.sqrt(p * (1.0 - p) / vals.size))
+
+
+def median_positive_rank(x) -> float:
+    vals = np.asarray([v for v in x if np.isfinite(v) and float(v) > 0], dtype=float)
+    return float(np.median(vals)) if vals.size else np.nan
 
 def setup_example(example_id, n, p, sparsity=False, rng=None):
     if rng is None: rng = np.random.default_rng()
@@ -252,10 +269,10 @@ def run_scenario_a(example_id, n, seed):
 
     strict_correct = (
         best_bic.K == len(families_true)
-        and family_signature(best_bic.family_names) == family_signature(families_true)
+        and is_strict_structure(best_bic.family_names, families_true)
     )
-    equiv_correct = (
-        is_equivalent(best_bic.family_names, families_true)
+    boundary_equiv_correct = (
+        is_boundary_equivalent(best_bic.family_names, families_true)
         if best_bic.K == len(families_true) else False
     )
 
@@ -270,6 +287,35 @@ def run_scenario_a(example_id, n, seed):
 
     pred_scores.sort(key=lambda x: x[1], reverse=True)
     best_pred_model = pred_scores[0][0] if pred_scores else best_bic
+
+    strict_bic_ranks = [
+        i + 1 for i, c in enumerate(bic_ranked)
+        if c.K == len(families_true) and is_strict_structure(c.family_names, families_true)
+    ]
+    boundary_bic_ranks = [
+        i + 1 for i, c in enumerate(bic_ranked)
+        if c.K == len(families_true) and is_boundary_equivalent(c.family_names, families_true)
+    ]
+    strict_pred_ranks = [
+        i + 1 for i, (c, _) in enumerate(pred_scores)
+        if c.K == len(families_true) and is_strict_structure(c.family_names, families_true)
+    ]
+    boundary_pred_ranks = [
+        i + 1 for i, (c, _) in enumerate(pred_scores)
+        if c.K == len(families_true) and is_boundary_equivalent(c.family_names, families_true)
+    ]
+    strict_bic_rank = int(strict_bic_ranks[0]) if strict_bic_ranks else 0
+    boundary_bic_rank = int(boundary_bic_ranks[0]) if boundary_bic_ranks else 0
+    strict_pred_rank = int(strict_pred_ranks[0]) if strict_pred_ranks else 0
+    boundary_pred_rank = int(boundary_pred_ranks[0]) if boundary_pred_ranks else 0
+    strict_bic_delta = (
+        float(bic_ranked[strict_bic_rank - 1].ic.bic - best_bic.ic.bic)
+        if strict_bic_rank > 0 else np.nan
+    )
+    boundary_bic_delta = (
+        float(bic_ranked[boundary_bic_rank - 1].ic.bic - best_bic.ic.bic)
+        if boundary_bic_rank > 0 else np.nan
+    )
 
     # Is the BIC-selected model also the best predictive model?
     bic_is_best_pred = int(
@@ -323,10 +369,10 @@ def run_scenario_a(example_id, n, seed):
             "bic": float(c.ic.bic),
             "is_true_structure": bool(
                 c.K == len(families_true)
-                and family_signature(c.family_names) == family_signature(families_true)
+                and is_strict_structure(c.family_names, families_true)
             ),
-            "is_equiv_structure": bool(
-                c.K == len(families_true) and is_equivalent(c.family_names, families_true)
+            "is_boundary_equiv_structure": bool(
+                c.K == len(families_true) and is_boundary_equivalent(c.family_names, families_true)
             ),
         }
         for i, c in enumerate(bic_ranked[:10])
@@ -340,10 +386,10 @@ def run_scenario_a(example_id, n, seed):
             "test_ll": float(score),
             "is_true_structure": bool(
                 c.K == len(families_true)
-                and family_signature(c.family_names) == family_signature(families_true)
+                and is_strict_structure(c.family_names, families_true)
             ),
-            "is_equiv_structure": bool(
-                c.K == len(families_true) and is_equivalent(c.family_names, families_true)
+            "is_boundary_equiv_structure": bool(
+                c.K == len(families_true) and is_boundary_equivalent(c.family_names, families_true)
             ),
         }
         for i, (c, score) in enumerate(pred_scores[:10])
@@ -351,7 +397,26 @@ def run_scenario_a(example_id, n, seed):
 
     return {
         "scenario": "A", "example_id": example_id, "n": n, "seed": seed,
-        "strict_correct": int(strict_correct), "equiv_correct": int(equiv_correct),
+        "strict_correct": int(strict_correct),
+        "boundary_equiv_correct": int(boundary_equiv_correct),
+        "strict_bic_rank": strict_bic_rank,
+        "boundary_bic_rank": boundary_bic_rank,
+        "strict_pred_rank": strict_pred_rank,
+        "boundary_pred_rank": boundary_pred_rank,
+        "strict_top3_bic": int(0 < strict_bic_rank <= 3),
+        "strict_top5_bic": int(0 < strict_bic_rank <= 5),
+        "strict_top10_bic": int(0 < strict_bic_rank <= 10),
+        "boundary_top3_bic": int(0 < boundary_bic_rank <= 3),
+        "boundary_top5_bic": int(0 < boundary_bic_rank <= 5),
+        "boundary_top10_bic": int(0 < boundary_bic_rank <= 10),
+        "strict_top3_pred": int(0 < strict_pred_rank <= 3),
+        "strict_top5_pred": int(0 < strict_pred_rank <= 5),
+        "strict_top10_pred": int(0 < strict_pred_rank <= 10),
+        "boundary_top3_pred": int(0 < boundary_pred_rank <= 3),
+        "boundary_top5_pred": int(0 < boundary_pred_rank <= 5),
+        "boundary_top10_pred": int(0 < boundary_pred_rank <= 10),
+        "strict_bic_delta": strict_bic_delta,
+        "boundary_bic_delta": boundary_bic_delta,
         "in_sample_ll_selected": float(in_sample_ll_selected),
         "test_ll_selected": float(test_ll_selected),
         "in_sample_ll_oracle": float(in_sample_ll_oracle),
@@ -579,8 +644,18 @@ def generate_latex_and_plots(resA, resB, resC):
         dfA = pd.DataFrame([r for r in resA if r and "error" not in r])
         if not dfA.empty:
             aggA = dfA.groupby(['example_id', 'n']).agg(
-                Strict_Selection_Rate=('strict_correct', 'mean'),
-                Oracle_Eq_Selection_Rate=('equiv_correct', 'mean'),
+                Strict_Top1_BIC=('strict_correct', 'mean'),
+                Strict_Top1_BIC_MCSE=('strict_correct', mcse_rate),
+                Boundary_Top1_BIC=('boundary_equiv_correct', 'mean'),
+                Boundary_Top1_BIC_MCSE=('boundary_equiv_correct', mcse_rate),
+                Strict_Top3_BIC=('strict_top3_bic', 'mean'),
+                Strict_Top5_BIC=('strict_top5_bic', 'mean'),
+                Strict_Top10_BIC=('strict_top10_bic', 'mean'),
+                Boundary_Top3_BIC=('boundary_top3_bic', 'mean'),
+                Boundary_Top5_BIC=('boundary_top5_bic', 'mean'),
+                Boundary_Top10_BIC=('boundary_top10_bic', 'mean'),
+                Median_Strict_BIC_Rank=('strict_bic_rank', median_positive_rank),
+                Mean_Strict_BIC_Delta=('strict_bic_delta', 'mean'),
                 BIC_is_Best_Pred_Rate=('bic_is_best_pred', 'mean'),
                 In_Sample_LL_Selected=('in_sample_ll_selected', 'mean'),
                 In_Sample_LL_Oracle=('in_sample_ll_oracle', 'mean'),
@@ -630,12 +705,14 @@ def generate_latex_and_plots(resA, resB, resC):
             if "se_success" not in dfC.columns:
                 dfC["se_success"] = np.nan
             dfC["abs_bias"] = np.abs(dfC["estimate"] - dfC["truth"])
+            dfC["squared_error"] = (dfC["estimate"] - dfC["truth"]) ** 2
             aggC = dfC.groupby(['example_id', 'n', 'method', 'param']).agg(
                 Truth=('truth', 'mean'),
                 Mean_Est=('estimate', 'mean'),
                 Mean_SE=('se', 'mean'),
                 SE_Success=('se_success', 'mean'),
                 Coverage=('coverage', 'mean'),
+                Coverage_MCSE=('coverage', mcse_rate),
                 CI_Length=('ci_len', 'mean')
             ).reset_index()
             aggC.to_csv(os.path.join(OUTPUT_ROOT, "table_scenario_C.csv"), index=False)
@@ -645,9 +722,11 @@ def generate_latex_and_plots(resA, resB, resC):
 
             aggC_main = dfC.groupby(['example_id', 'n', 'method']).agg(
                 Mean_Abs_Bias=('abs_bias', 'mean'),
+                Parameter_RMSE=('squared_error', lambda x: float(np.sqrt(np.mean(x)))),
                 Mean_SE=('se', 'mean'),
                 SE_Success=('se_success', 'mean'),
                 Coverage=('coverage', 'mean'),
+                Coverage_MCSE=('coverage', mcse_rate),
                 CI_Length=('ci_len', 'mean')
             ).reset_index()
             aggC_main.to_csv(os.path.join(OUTPUT_ROOT, "table_scenario_C_main.csv"), index=False)
@@ -675,7 +754,7 @@ def generate_latex_and_plots(resA, resB, resC):
                         "families": tb["families"],
                         "bic": tb["bic"],
                         "is_true_structure": tb.get("is_true_structure", False),
-                        "is_equiv_structure": tb.get("is_equiv_structure", False),
+                        "is_boundary_equiv_structure": tb.get("is_boundary_equiv_structure", False),
                     })
             if "top_pred" in r:
                 for tp in r["top_pred"]:
@@ -687,7 +766,7 @@ def generate_latex_and_plots(resA, resB, resC):
                         "families": tp["families"],
                         "test_ll": tp.get("test_ll", tp.get("test_nll")),
                         "is_true_structure": tp.get("is_true_structure", False),
-                        "is_equiv_structure": tp.get("is_equiv_structure", False),
+                        "is_boundary_equiv_structure": tp.get("is_boundary_equiv_structure", False),
                     })
 
         if top_bic_all:
@@ -701,7 +780,7 @@ def generate_latex_and_plots(resA, resB, resC):
                     avg_rank=('rank', 'mean'),
                     avg_bic=('bic', 'mean'),
                     true_hits=('is_true_structure', 'sum'),
-                    equiv_hits=('is_equiv_structure', 'sum'),
+                    boundary_equiv_hits=('is_boundary_equiv_structure', 'sum'),
                 ).reset_index()
                 freq = freq.sort_values(['count', 'avg_rank'], ascending=[False, True]).head(10)
                 freq.insert(0, "n", n_v)
@@ -726,7 +805,7 @@ def generate_latex_and_plots(resA, resB, resC):
                     avg_rank=('rank', 'mean'),
                     avg_test_ll=('test_ll', 'mean'),
                     true_hits=('is_true_structure', 'sum'),
-                    equiv_hits=('is_equiv_structure', 'sum'),
+                    boundary_equiv_hits=('is_boundary_equiv_structure', 'sum'),
                 ).reset_index()
                 freq = freq.sort_values(['count', 'avg_rank'], ascending=[False, True]).head(10)
                 freq.insert(0, "n", n_v)
@@ -745,6 +824,9 @@ def main():
     register_penalties()
 
     n_reps = int(os.environ.get("MIXGLM_N_REPS", 100))
+    n_reps_a = int(os.environ.get("MIXGLM_N_REPS_A", n_reps))
+    n_reps_b = int(os.environ.get("MIXGLM_N_REPS_B", n_reps))
+    n_reps_c = int(os.environ.get("MIXGLM_N_REPS_C", n_reps))
     n_jobs = int(os.environ.get("SLURM_CPUS_PER_TASK", os.environ.get("MIXGLM_N_JOBS", 1)))
     cache_dir = os.path.join(OUTPUT_ROOT, "checkpoints")
     os.makedirs(cache_dir, exist_ok=True)
@@ -754,6 +836,9 @@ def main():
         "sim_version": SIM_VERSION,
         "output_root": OUTPUT_ROOT,
         "n_reps": n_reps,
+        "n_reps_a": n_reps_a,
+        "n_reps_b": n_reps_b,
+        "n_reps_c": n_reps_c,
         "sample_sizes": SAMPLE_SIZES,
         "scenario_A_examples": SCENARIO_A_EXAMPLES,
         "scenario_B_examples": SCENARIO_B_EXAMPLES,
@@ -772,18 +857,21 @@ def main():
     print(f"Output root: {OUTPUT_ROOT}")
 
     tasksA, tasksB, tasksC = [], [], []
-    for rep in range(n_reps):
-        for ex in SCENARIO_A_EXAMPLES:
-            seed = rep * 100 + ex
-            for n in SAMPLE_SIZES:
-                tasksA.append(("A", (ex, n, seed)))
-        for ex in SCENARIO_C_EXAMPLES:
-            seed = rep * 100 + ex
-            for n in SAMPLE_SIZES:
-                tasksC.append(("C", (ex, n, seed)))
-        for ex in SCENARIO_B_EXAMPLES:
-            seed = rep * 100 + ex
-            tasksB.append(("B", (ex, seed)))
+    for rep in range(max(n_reps_a, n_reps_b, n_reps_c)):
+        if rep < n_reps_a:
+            for ex in SCENARIO_A_EXAMPLES:
+                seed = rep * 100 + ex
+                for n in SAMPLE_SIZES:
+                    tasksA.append(("A", (ex, n, seed)))
+        if rep < n_reps_c:
+            for ex in SCENARIO_C_EXAMPLES:
+                seed = rep * 100 + ex
+                for n in SAMPLE_SIZES:
+                    tasksC.append(("C", (ex, n, seed)))
+        if rep < n_reps_b:
+            for ex in SCENARIO_B_EXAMPLES:
+                seed = rep * 100 + ex
+                tasksB.append(("B", (ex, seed)))
 
     print(f"Evaluating {len(tasksA) + len(tasksB) + len(tasksC)} total simulation tasks...")
     all_tasks = tasksA + tasksB + tasksC

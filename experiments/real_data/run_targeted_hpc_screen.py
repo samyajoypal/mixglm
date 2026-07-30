@@ -211,6 +211,10 @@ def _process_task(task: Dict[str, Any], cache_dir: str) -> Dict[str, Any]:
         feature_names=feature_names,
         offset_train=offset_train,
         offset_test=offset_test,
+        refit_active=bool(task["refit_active"]),
+        refit_max_iter=int(task["refit_max_iter"]),
+        refit_n_starts=int(task["refit_n_starts"]),
+        min_active_per_component=int(task["min_active_per_component"]),
     )
     row.update(
         {
@@ -233,45 +237,57 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
     df.to_csv(os.path.join(out_dir, "targeted_screen_raw.csv"), index=False)
     summary_rows: List[Dict[str, Any]] = []
     comparison_rows: List[Dict[str, Any]] = []
+    bic_col = "selection_bic" if "selection_bic" in df.columns else "bic"
+    loglik_col = "selection_test_loglik" if "selection_test_loglik" in df.columns else "test_loglik"
+    rmse_col = "selection_test_rmse" if "selection_test_rmse" in df.columns else "test_rmse"
+    mae_col = "selection_test_mae" if "selection_test_mae" in df.columns else "test_mae"
+    finite_col = "selection_prediction_finite" if "selection_prediction_finite" in df.columns else "prediction_finite"
+    stable_col = "selection_prediction_stable" if "selection_prediction_stable" in df.columns else "prediction_stable"
     usable = df[
         df["converged"]
-        & np.isfinite(df["bic"])
-        & np.isfinite(df["test_loglik"])
+        & np.isfinite(df[bic_col])
+        & np.isfinite(df[loglik_col])
     ].copy()
-    usable["test_loglik_per_obs"] = usable["test_loglik"] / usable["n_test"]
+    usable["test_loglik_per_obs"] = usable[loglik_col] / usable["n_test"]
 
     for (dataset, split_id), g in usable.groupby(["dataset", "split_id"], sort=True):
-        ok = g[g["converged"] & np.isfinite(g["bic"]) & np.isfinite(g["test_loglik"])].copy()
+        ok = g[g["converged"] & np.isfinite(g[bic_col]) & np.isfinite(g[loglik_col])].copy()
         if ok.empty:
             continue
         stable = ok[
-            ok["prediction_stable"]
-            & np.isfinite(ok["test_rmse"])
-            & np.isfinite(ok["test_mae"])
+            ok[stable_col]
+            & np.isfinite(ok[rmse_col])
+            & np.isfinite(ok[mae_col])
         ].copy()
         prefix = os.path.join(out_dir, f"{dataset}_split{int(split_id)}")
-        ok.sort_values("bic").head(20).to_csv(prefix + "_top20_bic.csv", index=False)
-        ok.sort_values("test_loglik", ascending=False).head(20).to_csv(prefix + "_top20_loglik.csv", index=False)
-        stable.sort_values("test_rmse").head(20).to_csv(prefix + "_top20_rmse.csv", index=False)
-        stable.sort_values("test_mae").head(20).to_csv(prefix + "_top20_mae.csv", index=False)
+        ok.sort_values(bic_col).head(20).to_csv(prefix + "_top20_bic.csv", index=False)
+        ok.sort_values(loglik_col, ascending=False).head(20).to_csv(prefix + "_top20_loglik.csv", index=False)
+        stable.sort_values(rmse_col).head(20).to_csv(prefix + "_top20_rmse.csv", index=False)
+        stable.sort_values(mae_col).head(20).to_csv(prefix + "_top20_mae.csv", index=False)
         nonid = ok[ok["nonidentical"]].copy()
         if not nonid.empty:
-            nonid.sort_values("bic").head(20).to_csv(prefix + "_top20_nonident_bic.csv", index=False)
-            nonid.sort_values("test_loglik", ascending=False).head(20).to_csv(
+            nonid.sort_values(bic_col).head(20).to_csv(prefix + "_top20_nonident_bic.csv", index=False)
+            nonid.sort_values(loglik_col, ascending=False).head(20).to_csv(
                 prefix + "_top20_nonident_loglik.csv", index=False
             )
-            nonid[nonid["prediction_stable"]].sort_values("test_rmse").head(20).to_csv(
+            nonid[nonid[stable_col]].sort_values(rmse_col).head(20).to_csv(
                 prefix + "_top20_nonident_rmse.csv", index=False
             )
+        if "publication_candidate" in ok.columns:
+            ok[ok["publication_candidate"]].sort_values(bic_col).head(20).to_csv(
+                prefix + "_top20_publication_bic.csv", index=False
+            )
 
-        best_bic = ok.sort_values("bic").iloc[0]
-        best_ll = ok.sort_values("test_loglik", ascending=False).iloc[0]
-        best_rmse = stable.sort_values("test_rmse").iloc[0] if not stable.empty else best_bic
-        best_k1 = ok[ok["K"] == 1].sort_values("bic").iloc[0]
+        best_bic = ok.sort_values(bic_col).iloc[0]
+        best_ll = ok.sort_values(loglik_col, ascending=False).iloc[0]
+        best_rmse = stable.sort_values(rmse_col).iloc[0] if not stable.empty else best_bic
+        best_k1 = ok[ok["K"] == 1].sort_values(bic_col).iloc[0]
         identical = ok[(ok["K"] >= 2) & (~ok["nonidentical"])]
         nonidentical = ok[ok["nonidentical"]]
-        best_identical = identical.sort_values("bic").iloc[0] if not identical.empty else None
-        best_nonidentical = nonidentical.sort_values("bic").iloc[0] if not nonidentical.empty else None
+        publishable = ok[ok["publication_candidate"]] if "publication_candidate" in ok.columns else ok.iloc[0:0]
+        best_identical = identical.sort_values(bic_col).iloc[0] if not identical.empty else None
+        best_nonidentical = nonidentical.sort_values(bic_col).iloc[0] if not nonidentical.empty else None
+        best_publishable = publishable.sort_values(bic_col).iloc[0] if not publishable.empty else None
         summary_rows.append(
             {
                 "dataset": dataset,
@@ -281,25 +297,35 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
                 "best_bic_families": best_bic["families"],
                 "best_bic_init": best_bic["init"],
                 "best_bic_lambda": best_bic["lambda"],
-                "best_bic": best_bic["bic"],
+                "best_bic": best_bic[bic_col],
+                "best_icl": best_bic.get("selection_icl", np.nan),
+                "best_bic_source": best_bic.get("selection_source", "penalized_fit"),
                 "best_bic_nonidentical": bool(best_bic["nonidentical"]),
-                "best_bic_prediction_finite": bool(best_bic["prediction_finite"]),
-                "best_bic_prediction_stable": bool(best_bic["prediction_stable"]),
-                "delta_bic_vs_k1": float(best_bic["bic"] - best_k1["bic"]),
+                "best_bic_prediction_finite": bool(best_bic[finite_col]),
+                "best_bic_prediction_stable": bool(best_bic[stable_col]),
+                "best_bic_min_active_count": int(best_bic.get("min_active_count", -1)),
+                "best_bic_has_intercept_only_component": bool(
+                    best_bic.get("has_intercept_only_component", False)
+                ),
+                "best_bic_publication_candidate": bool(best_bic.get("publication_candidate", False)),
+                "delta_bic_vs_k1": float(best_bic[bic_col] - best_k1[bic_col]),
                 "delta_bic_vs_identical": (
-                    float(best_bic["bic"] - best_identical["bic"])
+                    float(best_bic[bic_col] - best_identical[bic_col])
                     if best_identical is not None else np.nan
                 ),
                 "best_loglik_families": best_ll["families"],
                 "best_loglik_init": best_ll["init"],
                 "best_loglik_lambda": best_ll["lambda"],
-                "best_test_loglik": best_ll["test_loglik"],
+                "best_test_loglik": best_ll[loglik_col],
                 "best_loglik_nonidentical": bool(best_ll["nonidentical"]),
                 "best_rmse_families": best_rmse["families"],
                 "best_rmse_init": best_rmse["init"],
                 "best_rmse_lambda": best_rmse["lambda"],
-                "best_test_rmse": best_rmse["test_rmse"],
+                "best_test_rmse": best_rmse[rmse_col],
                 "best_rmse_nonidentical": bool(best_rmse["nonidentical"]),
+                "best_publication_families": best_publishable["families"] if best_publishable is not None else "",
+                "best_publication_lambda": best_publishable["lambda"] if best_publishable is not None else np.nan,
+                "best_publication_bic": best_publishable[bic_col] if best_publishable is not None else np.nan,
             }
         )
         comparison_models = [("overall", best_bic), ("k1", best_k1)]
@@ -317,24 +343,32 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
                     "K": int(row["K"]),
                     "lambda": float(row["lambda"]),
                     "init": row["init"],
-                    "bic": float(row["bic"]),
-                    "delta_bic_from_split_winner": float(row["bic"] - best_bic["bic"]),
-                    "test_loglik": float(row["test_loglik"]),
+                    "bic": float(row[bic_col]),
+                    "icl": float(row.get("selection_icl", np.nan)),
+                    "selection_source": row.get("selection_source", "penalized_fit"),
+                    "delta_bic_from_split_winner": float(row[bic_col] - best_bic[bic_col]),
+                    "test_loglik": float(row[loglik_col]),
                     "test_loglik_per_obs": float(row["test_loglik_per_obs"]),
-                    "test_rmse": float(row["test_rmse"]),
-                    "test_mae": float(row["test_mae"]),
+                    "test_rmse": float(row[rmse_col]),
+                    "test_mae": float(row[mae_col]),
                     "rmse_skill": float(row["rmse_skill"]),
                     "mae_skill": float(row["mae_skill"]),
-                    "prediction_finite": bool(row["prediction_finite"]),
-                    "prediction_stable": bool(row["prediction_stable"]),
+                    "prediction_finite": bool(row[finite_col]),
+                    "prediction_stable": bool(row[stable_col]),
+                    "min_active_count": int(row.get("min_active_count", -1)),
+                    "has_intercept_only_component": bool(
+                        row.get("has_intercept_only_component", False)
+                    ),
+                    "publication_candidate": bool(row.get("publication_candidate", False)),
                     "pi": row["pi"],
                     "active_counts": row["active_counts"],
                 }
             )
         print(
             f"[{dataset} split {int(split_id)}] best BIC={best_bic['families']} init={best_bic['init']} "
-            f"lam={best_bic['lambda']} bic={best_bic['bic']:.3f} ll={best_bic['test_loglik']:.3f} "
-            f"rmse={best_bic['test_rmse']:.3f} active={best_bic['active_counts']}",
+            f"lam={best_bic['lambda']} bic={best_bic[bic_col]:.3f} ll={best_bic[loglik_col]:.3f} "
+            f"rmse={best_bic[rmse_col]:.3f} active={best_bic['active_counts']} "
+            f"source={best_bic.get('selection_source', 'penalized_fit')}",
             flush=True,
         )
 
@@ -343,8 +377,8 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
         pd.DataFrame(comparison_rows).to_csv(os.path.join(out_dir, "split_comparisons.csv"), index=False)
 
     config_cols = ["dataset", "split_id", "families", "K", "lambda", "nonidentical"]
-    best_init = usable.sort_values("bic").drop_duplicates(config_cols, keep="first").copy()
-    best_init["delta_bic"] = best_init["bic"] - best_init.groupby(["dataset", "split_id"])["bic"].transform("min")
+    best_init = usable.sort_values(bic_col).drop_duplicates(config_cols, keep="first").copy()
+    best_init["delta_bic"] = best_init[bic_col] - best_init.groupby(["dataset", "split_id"])[bic_col].transform("min")
     stability = (
         best_init.groupby(["dataset", "families", "K", "lambda", "nonidentical"], as_index=False)
         .agg(
@@ -354,24 +388,27 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
             median_delta_bic=("delta_bic", "median"),
             max_delta_bic=("delta_bic", "max"),
             mean_test_loglik_per_obs=("test_loglik_per_obs", "mean"),
-            mean_test_rmse=("test_rmse", "mean"),
-            mean_test_mae=("test_mae", "mean"),
+            mean_test_rmse=(rmse_col, "mean"),
+            mean_test_mae=(mae_col, "mean"),
             mean_rmse_skill=("rmse_skill", "mean"),
             mean_mae_skill=("mae_skill", "mean"),
-            finite_prediction_rate=("prediction_finite", "mean"),
-            stable_prediction_rate=("prediction_stable", "mean"),
+            finite_prediction_rate=(finite_col, "mean"),
+            stable_prediction_rate=(stable_col, "mean"),
             median_min_pi=("min_pi", "median"),
+            median_min_active_count=("min_active_count", "median"),
+            intercept_only_rate=("has_intercept_only_component", "mean"),
+            publication_candidate_rate=("publication_candidate", "mean"),
         )
         .sort_values(["dataset", "bic_wins", "mean_delta_bic"], ascending=[True, False, True])
     )
     stability.to_csv(os.path.join(out_dir, "model_stability.csv"), index=False)
 
-    family_best = best_init.sort_values("bic").drop_duplicates(
+    family_best = best_init.sort_values(bic_col).drop_duplicates(
         ["dataset", "split_id", "families", "K"], keep="first"
     )
-    family_best["delta_bic"] = family_best["bic"] - family_best.groupby(
+    family_best["delta_bic"] = family_best[bic_col] - family_best.groupby(
         ["dataset", "split_id"]
-    )["bic"].transform("min")
+    )[bic_col].transform("min")
     family_stability = (
         family_best.groupby(["dataset", "families", "K", "nonidentical"], as_index=False)
         .agg(
@@ -380,10 +417,13 @@ def _write_leaderboards(df: pd.DataFrame, out_dir: str) -> None:
             mean_delta_bic=("delta_bic", "mean"),
             median_delta_bic=("delta_bic", "median"),
             mean_test_loglik_per_obs=("test_loglik_per_obs", "mean"),
-            mean_test_rmse=("test_rmse", "mean"),
-            mean_test_mae=("test_mae", "mean"),
-            finite_prediction_rate=("prediction_finite", "mean"),
-            stable_prediction_rate=("prediction_stable", "mean"),
+            mean_test_rmse=(rmse_col, "mean"),
+            mean_test_mae=(mae_col, "mean"),
+            finite_prediction_rate=(finite_col, "mean"),
+            stable_prediction_rate=(stable_col, "mean"),
+            median_min_active_count=("min_active_count", "median"),
+            intercept_only_rate=("has_intercept_only_component", "mean"),
+            publication_candidate_rate=("publication_candidate", "mean"),
         )
         .sort_values(["dataset", "bic_wins", "mean_delta_bic"], ascending=[True, False, True])
     )
@@ -402,7 +442,7 @@ def main() -> None:
 
     datasets = _parse_csv(os.environ.get("MIXGLM_REAL_DATASETS", "rand,blog,super_raw,parkinsons_log,crime_beta"))
     inits = _parse_csv(os.environ.get("MIXGLM_REAL_INITS", "kmeans_glm,quantile_glm"))
-    lambdas = _parse_csv(os.environ.get("MIXGLM_REAL_LAMBDAS", "5,10,20,30,50,100"), float)
+    lambdas = _parse_csv(os.environ.get("MIXGLM_REAL_LAMBDAS", "0,0.25,0.5,1,2,5,10,20"), float)
     k_min = int(os.environ.get("MIXGLM_REAL_K_MIN", "2"))
     k_max = int(os.environ.get("MIXGLM_REAL_K_MAX", "3"))
     n_train = int(os.environ.get("MIXGLM_REAL_N_TRAIN", "2000"))
@@ -412,6 +452,10 @@ def main() -> None:
     tol = float(os.environ.get("MIXGLM_REAL_TOL", "1e-3"))
     n_starts = int(os.environ.get("MIXGLM_REAL_N_STARTS", "2"))
     active_threshold = float(os.environ.get("MIXGLM_REAL_ACTIVE_THRESHOLD", "1e-6"))
+    refit_active = _env_bool("MIXGLM_REAL_REFIT_ACTIVE", False)
+    refit_max_iter = int(os.environ.get("MIXGLM_REAL_REFIT_MAX_ITER", str(max_iter)))
+    refit_n_starts = int(os.environ.get("MIXGLM_REAL_REFIT_N_STARTS", str(n_starts)))
+    min_active_per_component = int(os.environ.get("MIXGLM_REAL_MIN_ACTIVE_PER_COMPONENT", "0"))
     n_jobs = int(os.environ.get("SLURM_CPUS_PER_TASK", os.environ.get("MIXGLM_REAL_N_JOBS", "1")))
     seed = int(os.environ.get("MIXGLM_REAL_SEED", "20260624"))
     n_splits = int(os.environ.get("MIXGLM_REAL_N_SPLITS", "1"))
@@ -435,6 +479,11 @@ def main() -> None:
         "tol": tol,
         "n_starts": n_starts,
         "active_threshold": active_threshold,
+        "refit_active": refit_active,
+        "refit_max_iter": refit_max_iter,
+        "refit_n_starts": refit_n_starts,
+        "min_active_per_component": min_active_per_component,
+        "selection_bic": "active-set refit BIC when available; penalized active-set BIC otherwise",
         "n_jobs": n_jobs,
         "seed": seed,
         "n_splits": n_splits,
@@ -491,6 +540,10 @@ def main() -> None:
                                 "tol": tol,
                                 "n_starts": n_starts,
                                 "active_threshold": active_threshold,
+                                "refit_active": refit_active,
+                                "refit_max_iter": refit_max_iter,
+                                "refit_n_starts": refit_n_starts,
+                                "min_active_per_component": min_active_per_component,
                             }
                         )
 

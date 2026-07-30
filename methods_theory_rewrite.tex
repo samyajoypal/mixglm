@@ -197,7 +197,12 @@ support of \(Y\).  For a fitted model \(\mathfrak m\), define
 where BIC denotes the Bayesian information criterion and
 \(a_{\mathfrak m}\) is the number of free parameters in the fixed model
 \citep{schwarz1978dimensions}.
-For penalized fits we use the active-set analogue
+Penalized fits are used as a screening and regularization device.  For a
+lasso-selected or elastic-net-selected support, the final likelihood score is
+computed by refitting the same family tuple without penalty while holding the
+component-specific active sets fixed.  If
+\(\hat S_k=\{j>0:\hat\beta_{kj}\neq0\}\) is the selected non-intercept support
+for component \(k\), the refitted model uses the parameter count
 \[
     \hat a_{\mathfrak m}
     =
@@ -205,12 +210,18 @@ For penalized fits we use the active-set analogue
     +K
     +
     \sum_{k=1}^K
-    \#\{j>0:\hat\beta_{kj}\neq 0\}
+    |\hat S_k|
     +
     \sum_{k=1}^K\dim(\gamma_k),
 \]
-as a computational model-selection score.  This active-set BIC is a heuristic
-unless an additional post-selection theory is supplied.
+where the second term counts the \(K\) component intercepts.  We report the
+penalized objective and the unpenalized likelihood of the screening fit, but
+rank lasso-selected candidates by the BIC of the unpenalized active-set refit
+when the refit converges.  Ridge penalties do not define a sparse active set
+and are therefore treated as sensitivity analyses rather than as sources of
+post-lasso BIC scores.  The refit BIC is still conditional on the selected
+support and family tuple; it is a transparent computational score, not a claim
+of valid post-selection inference.
 
 For small candidate spaces we enumerate all unordered family tuples.  For
 larger spaces the implementation uses a beam search: tuples of size \(K\) are
