@@ -183,8 +183,12 @@ def _process_task(task: Dict[str, Any], cache_dir: str) -> Dict[str, Any]:
 
     cache_path = os.path.join(cache_dir, task["task_id"] + ".json")
     if os.path.exists(cache_path):
-        with open(cache_path, "r") as f:
-            return json.load(f)
+        try:
+            with open(cache_path, "r") as f:
+                return json.load(f)
+        except (OSError, ValueError, json.JSONDecodeError):
+            # A wall-time termination can interrupt a checkpoint write. Recompute it.
+            pass
 
     data = np.load(task["prepared_path"], allow_pickle=True)
     X_train = data["X_train"]
@@ -228,8 +232,10 @@ def _process_task(task: Dict[str, Any], cache_dir: str) -> Dict[str, Any]:
             "task_id": task["task_id"],
         }
     )
-    with open(cache_path, "w") as f:
+    temp_cache_path = f"{cache_path}.tmp.{os.getpid()}"
+    with open(temp_cache_path, "w") as f:
         json.dump(row, f)
+    os.replace(temp_cache_path, cache_path)
     return row
 
 
