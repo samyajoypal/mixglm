@@ -203,10 +203,18 @@ def load_dataset(name: str) -> DatasetSpec:
         return DatasetSpec(key, "real", REAL_FAMILIES, X, np.log(y.astype(float)), names)
     if key == "parkinsons_raw":
         X, y, names = _load_xy("parkinsons")
-        return DatasetSpec(key, "positive", POSITIVE_FAMILIES, X, y.astype(float), names)
+        groups, offset = _load_auxiliary("parkinsons", X.shape[0])
+        return DatasetSpec(
+            key, "positive", POSITIVE_FAMILIES, X, y.astype(float), names,
+            groups=groups, offset=offset,
+        )
     if key == "parkinsons_log":
         X, y, names = _load_xy("parkinsons")
-        return DatasetSpec(key, "real", REAL_FAMILIES, X, np.log(y.astype(float)), names)
+        groups, offset = _load_auxiliary("parkinsons", X.shape[0])
+        return DatasetSpec(
+            key, "real", REAL_FAMILIES, X, np.log(y.astype(float)), names,
+            groups=groups, offset=offset,
+        )
     raise ValueError(f"Unknown dataset '{name}'.")
 
 
@@ -632,6 +640,10 @@ def fit_one(
             row["nonidentical"]
             and int(row["K"]) >= 2
             and bool(row["passes_active_component_gate"])
+            and bool(row["selection_prediction_finite"])
+            and bool(row["selection_prediction_stable"])
+            and np.isfinite(row["selection_bic"])
+            and np.isfinite(row["selection_test_loglik"])
         )
     except Exception as e:
         row.update(

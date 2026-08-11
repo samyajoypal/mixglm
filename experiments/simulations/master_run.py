@@ -58,6 +58,8 @@ LAMBDA_GRID = _parse_float_list("MIXGLM_LAMBDA_GRID", [0.25, 0.5, 1, 2, 5, 10, 2
 SCENARIO_B_N = int(os.environ.get("MIXGLM_SCENARIO_B_N", 1000))
 SCENARIO_B_P = int(os.environ.get("MIXGLM_SCENARIO_B_P", 20))
 SCENARIO_A_BEAM_WIDTH = int(os.environ.get("MIXGLM_SCENARIO_A_BEAM_WIDTH", 10))
+SCENARIO_C_N_STARTS = int(os.environ.get("MIXGLM_SCENARIO_C_N_STARTS", 2))
+SCENARIO_C_MAX_ITER = int(os.environ.get("MIXGLM_SCENARIO_C_MAX_ITER", 100))
 
 # Boundary-equivalent classes are reported separately from strict recovery.
 BOUNDARY_EQUIV_CLASSES = {
@@ -539,10 +541,11 @@ def run_scenario_c(example_id, n, seed):
 
     mc = [ComponentSpec(family=FAMILIES.create(c.name), link=c.link, penalty=PENALTIES.create("none")) for c in comps]
     model = MixtureGLM(components=mc)
-    model.fit(y=sim.y, X=X, max_iter=100, tol=1e-4, n_starts=2, seed=seed,
+    model.fit(y=sim.y, X=X, max_iter=SCENARIO_C_MAX_ITER, tol=1e-4,
+              n_starts=SCENARIO_C_N_STARTS, seed=seed,
               init=init_for_kind(kind), standardize=True, verbose=False)
 
-    if not model.result_.converged: return []
+    if model.result_ is None or not model.result_.converged: return []
 
     methods = [
         m.strip().lower()
@@ -559,9 +562,16 @@ def run_scenario_c(example_id, n, seed):
     b1t_fit = to_fit_scale(comps[1].beta)
 
     betas_hat = model.betas_original_scale()
-    swapped = False
-    if np.linalg.norm(comps[0].beta - betas_hat[1]) + np.linalg.norm(comps[1].beta - betas_hat[0]) < np.linalg.norm(comps[0].beta - betas_hat[0]) + np.linalg.norm(comps[1].beta - betas_hat[1]):
-        swapped = True
+    direct_distance = float(
+        np.linalg.norm(comps[0].beta - betas_hat[0])
+        + np.linalg.norm(comps[1].beta - betas_hat[1])
+    )
+    crossed_distance = float(
+        np.linalg.norm(comps[0].beta - betas_hat[1])
+        + np.linalg.norm(comps[1].beta - betas_hat[0])
+    )
+    # Components with different families are intrinsically labelled by family.
+    swapped = bool(families_true[0] == families_true[1] and crossed_distance < direct_distance)
 
     true_params = {}
     for j in range(5):
@@ -593,9 +603,16 @@ def run_scenario_c(example_id, n, seed):
                 "scenario": "C",
                 "example_id": example_id,
                 "n": n,
-                "seed": seed,
-                "method": method,
-                "error": str(e)[:200],
+                    "seed": seed,
+                    "method": method,
+                    "fit_loglik": float(model.result_.loglik),
+                    "fit_n_iter": int(model.result_.n_iter),
+                    "fit_min_pi": float(np.min(model.result_.pi)),
+                    "alignment_swapped": swapped,
+                    "direct_beta_distance": direct_distance,
+                    "crossed_beta_distance": crossed_distance,
+                    "n_starts": SCENARIO_C_N_STARTS,
+                    "error": str(e)[:200],
             })
             continue
 
@@ -619,6 +636,13 @@ def run_scenario_c(example_id, n, seed):
                     "se_success": se_success,
                     "se_message": se_message,
                     "derivative_sources": derivative_sources,
+                    "fit_loglik": float(model.result_.loglik),
+                    "fit_n_iter": int(model.result_.n_iter),
+                    "fit_min_pi": float(np.min(model.result_.pi)),
+                    "alignment_swapped": swapped,
+                    "direct_beta_distance": direct_distance,
+                    "crossed_beta_distance": crossed_distance,
+                    "n_starts": SCENARIO_C_N_STARTS,
                     "param": param, "truth": float(truth), "estimate": float(row['estimate']), "se": float(row['se']),
                     "coverage": float(covers), "ci_len": float(row['ci97.5%'] - row['ci2.5%'])
                 })
@@ -628,13 +652,18 @@ def process_task(task_type, args, cache_dir):
     task_id = f"{SIM_VERSION}_{task_type}_{'_'.join(map(str, args))}.json"
     cache_path = os.path.join(cache_dir, task_id)
     if os.path.exists(cache_path):
-        with open(cache_path, "r") as f: return json.load(f)
+        try:
+            with open(cache_path, "r") as f: return json.load(f)
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
 
     if task_type == "A": res = run_scenario_a(*args)
     elif task_type == "B": res = run_scenario_b(*args)
     elif task_type == "C": res = run_scenario_c(*args)
 
-    with open(cache_path, "w") as f: json.dump(res, f)
+    temp_cache_path = f"{cache_path}.tmp.{os.getpid()}"
+    with open(temp_cache_path, "w") as f: json.dump(res, f)
+    os.replace(temp_cache_path, cache_path)
     return res
 
 def generate_latex_and_plots(resA, resB, resC):
@@ -846,6 +875,8 @@ def main():
         "scenario_B_n": SCENARIO_B_N,
         "scenario_B_p": SCENARIO_B_P,
         "scenario_A_beam_width": SCENARIO_A_BEAM_WIDTH,
+        "scenario_C_n_starts": SCENARIO_C_N_STARTS,
+        "scenario_C_max_iter": SCENARIO_C_MAX_ITER,
         "lambda_grid": LAMBDA_GRID,
         "inference_methods": os.environ.get("MIXGLM_INFERENCE_METHODS", "louis,numeric"),
         "created_unix_time": time.time(),

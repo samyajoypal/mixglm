@@ -99,6 +99,7 @@ def prepare_parkinsons() -> None:
     target_col = "total_UPDRS"
     drop_cols = ["subject#", "motor_UPDRS", target_col]
     y = pd.to_numeric(df[target_col], errors="coerce").to_numpy(dtype=float)
+    groups = pd.to_numeric(df["subject#"], errors="coerce").to_numpy(dtype=float)
     X_df = df.drop(columns=[c for c in drop_cols if c in df.columns]).copy()
     X_df = X_df.apply(pd.to_numeric, errors="coerce")
     for col in X_df.columns:
@@ -108,16 +109,21 @@ def prepare_parkinsons() -> None:
     X = np.column_stack([np.ones(X.shape[0]), X])
     names = ["Intercept"] + list(X_df.columns)
 
-    ok = np.isfinite(y) & np.all(np.isfinite(X), axis=1) & (y > 0)
+    ok = np.isfinite(y) & np.isfinite(groups) & np.all(np.isfinite(X), axis=1) & (y > 0)
     X = X[ok]
     y = y[ok]
+    groups = groups[ok].astype(int)
 
     os.makedirs("data", exist_ok=True)
     np.save("data/parkinsons_X.npy", X)
     np.save("data/parkinsons_y.npy", y)
+    np.save("data/parkinsons_groups.npy", groups)
     with open("data/parkinsons_features.json", "w") as f:
         json.dump(names, f, indent=2)
-    print(f"Saved UCI Parkinsons telemonitoring: X={X.shape}, y={y.shape}")
+    print(
+        f"Saved UCI Parkinsons telemonitoring: X={X.shape}, y={y.shape}, "
+        f"subjects={np.unique(groups).size}"
+    )
 
 
 if __name__ == "__main__":

@@ -61,6 +61,21 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _load_checkpoint(path: Path) -> Dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _write_checkpoint(path: Path, payload: Dict[str, Any]) -> None:
+    temp_path = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    temp_path.write_text(json.dumps(_jsonable(payload)))
+    os.replace(temp_path, path)
+
+
 def _register() -> None:
     register_families()
     register_links()
@@ -70,8 +85,9 @@ def _register() -> None:
 def _full_task(task: Dict[str, Any], cache_dir: Path) -> Dict[str, Any]:
     _register()
     path = cache_dir / f"{task['task_id']}.json"
-    if path.exists():
-        return json.loads(path.read_text())
+    cached = _load_checkpoint(path)
+    if cached is not None:
+        return cached
     row = fit_one(
         fnames=tuple(task["families"]),
         lam=float(task["lambda"]),
@@ -86,6 +102,10 @@ def _full_task(task: Dict[str, Any], cache_dir: Path) -> Dict[str, Any]:
         n_starts=int(task["n_starts"]),
         active_threshold=float(task["active_threshold"]),
         feature_names=task["feature_names"],
+        refit_active=True,
+        refit_max_iter=int(task["refit_max_iter"]),
+        refit_n_starts=int(task["refit_n_starts"]),
+        min_active_per_component=int(task["min_active_per_component"]),
     )
     row.update(
         {
@@ -97,11 +117,11 @@ def _full_task(task: Dict[str, Any], cache_dir: Path) -> Dict[str, Any]:
             "p": int(task["X"].shape[1]),
         }
     )
-    path.write_text(json.dumps(_jsonable(row)))
+    _write_checkpoint(path, row)
     return row
 
 
-def _fit_penalized_path(
+def _fit_selection_path(
     *,
     y: np.ndarray,
     X: np.ndarray,
@@ -111,9 +131,14 @@ def _fit_penalized_path(
     max_iter: int,
     tol: float,
     n_starts: int,
+    refit_n_starts: int,
+    active_threshold: float,
+    min_active_per_component: int,
     seed: int,
-) -> Tuple[MixtureGLM, float, str]:
-    best: MixtureGLM | None = None
+) -> Tuple[MixtureGLM, MixtureGLM, List[Tuple[bool, ...]], float, str]:
+    best_penalized: MixtureGLM | None = None
+    best_refit: MixtureGLM | None = None
+    best_masks: List[Tuple[bool, ...]] | None = None
     best_bic = np.inf
     best_lambda = np.nan
     best_init = ""
@@ -138,16 +163,40 @@ def _fit_penalized_path(
                 result = model.result_
                 if result is None or not result.converged or not np.isfinite(result.bic):
                     continue
-                if result.bic < best_bic:
-                    best = model
-                    best_bic = float(result.bic)
+                masks = _support_masks(model, active_threshold)
+                active_counts = [int(sum(mask) - 1) for mask in masks]
+                if min(active_counts) < int(min_active_per_component):
+                    continue
+                refit = _post_lasso_refit(
+                    y=y,
+                    X=X,
+                    families=families,
+                    masks=masks,
+                    preferred_init=init,
+                    max_iter=max_iter,
+                    tol=tol,
+                    n_starts=refit_n_starts,
+                    seed=seed + 10000 + task_no,
+                )
+                refit_result = refit.result_
+                if (
+                    refit_result is None
+                    or not refit_result.converged
+                    or not np.isfinite(refit_result.bic)
+                ):
+                    continue
+                if refit_result.bic < best_bic:
+                    best_penalized = model
+                    best_refit = refit
+                    best_masks = masks
+                    best_bic = float(refit_result.bic)
                     best_lambda = float(lam)
                     best_init = str(init)
             except Exception:
                 continue
-    if best is None:
-        raise RuntimeError("No penalized fit converged along the selection path.")
-    return best, best_lambda, best_init
+    if best_penalized is None or best_refit is None or best_masks is None:
+        raise RuntimeError("No active-set refit passed the component gate along the selection path.")
+    return best_penalized, best_refit, best_masks, best_lambda, best_init
 
 
 def _support_masks(model: MixtureGLM, threshold: float) -> List[Tuple[bool, ...]]:
@@ -343,8 +392,9 @@ def _bootstrap_one(
 ) -> Dict[str, Any]:
     _register()
     path = cache_dir / f"bootstrap_{replicate:04d}.json"
-    if path.exists():
-        return json.loads(path.read_text())
+    cached = _load_checkpoint(path)
+    if cached is not None:
+        return cached
     started = time.time()
     try:
         rng = np.random.default_rng(replicate_seed)
@@ -358,7 +408,7 @@ def _bootstrap_one(
             kind="count",
             p_screen=p_screen,
         )
-        penalized, selected_lambda, selected_init = _fit_penalized_path(
+        penalized, refit, masks, selected_lambda, selected_init = _fit_selection_path(
             y=y_boot,
             X=X_boot,
             families=families,
@@ -367,19 +417,10 @@ def _bootstrap_one(
             max_iter=max_iter,
             tol=tol,
             n_starts=n_starts,
+            refit_n_starts=refit_n_starts,
+            active_threshold=active_threshold,
+            min_active_per_component=1,
             seed=replicate_seed + 100,
-        )
-        masks = _support_masks(penalized, active_threshold)
-        refit = _post_lasso_refit(
-            y=y_boot,
-            X=X_boot,
-            families=families,
-            masks=masks,
-            preferred_init=selected_init,
-            max_iter=max_iter,
-            tol=tol,
-            n_starts=refit_n_starts,
-            seed=replicate_seed + 10000,
         )
         if penalized.result_ is None or refit.result_ is None:
             raise RuntimeError("Bootstrap fit returned no result.")
@@ -422,7 +463,7 @@ def _bootstrap_one(
                 row[f"extra_{k}_{name}"] = float(value)
                 if name == "log_alpha":
                     row[f"alpha_{k}"] = float(np.exp(float(value)))
-        path.write_text(json.dumps(_jsonable(row)))
+        _write_checkpoint(path, row)
         return row
     except Exception as exc:
         row = {
@@ -432,7 +473,7 @@ def _bootstrap_one(
             "error": str(exc)[:500],
             "seconds": float(time.time() - started),
         }
-        path.write_text(json.dumps(_jsonable(row)))
+        _write_checkpoint(path, row)
         return row
 
 
@@ -550,6 +591,9 @@ def main() -> None:
     refit_starts = int(os.environ.get("MIXGLM_INFERENCE_REFIT_STARTS", "2"))
     active_threshold = float(os.environ.get("MIXGLM_INFERENCE_ACTIVE_THRESHOLD", "1e-5"))
     bootstrap_reps = int(os.environ.get("MIXGLM_INFERENCE_BOOTSTRAP_REPS", "500"))
+    min_active_per_component = int(
+        os.environ.get("MIXGLM_INFERENCE_MIN_ACTIVE_PER_COMPONENT", "1")
+    )
     bootstrap_families = tuple(
         _parse_csv(os.environ.get("MIXGLM_INFERENCE_BOOTSTRAP_FAMILIES", "poisson,nb2"))
     )
@@ -591,6 +635,8 @@ def main() -> None:
         "refit_starts": refit_starts,
         "active_threshold": active_threshold,
         "bootstrap_reps": bootstrap_reps,
+        "min_active_per_component": min_active_per_component,
+        "selection_rule": "minimum active-set refit BIC subject to the active-component gate",
         "bootstrap_families": bootstrap_families,
         "leaderboard_families": leaderboard_families,
         "leaderboard_k_max": leaderboard_k_max,
@@ -618,6 +664,9 @@ def main() -> None:
                         "tol": tol,
                         "n_starts": leaderboard_starts,
                         "active_threshold": active_threshold,
+                        "refit_max_iter": max_iter,
+                        "refit_n_starts": refit_starts,
+                        "min_active_per_component": min_active_per_component,
                         "X": X_full,
                         "y": y_full,
                         "feature_names": feature_names,
@@ -630,19 +679,37 @@ def main() -> None:
     leaderboard = pd.DataFrame(rows)
     leaderboard.to_csv(out_dir / "full_data_leaderboard_raw.csv", index=False)
     usable = leaderboard[
-        leaderboard["converged"] & np.isfinite(leaderboard["bic"])
-    ].sort_values("bic")
+        leaderboard["converged"]
+        & np.isfinite(leaderboard["selection_bic"])
+        & leaderboard["selection_prediction_stable"]
+    ].sort_values("selection_bic")
     usable.head(50).to_csv(out_dir / "full_data_top50_bic.csv", index=False)
     if usable.empty:
         raise RuntimeError("No full-data leaderboard model converged.")
     overall_winner = usable.iloc[0]
+    publication_usable = usable[
+        usable["nonidentical"]
+        & ~usable["has_intercept_only_component"]
+        & usable["passes_active_component_gate"]
+    ]
+    publication_usable.head(50).to_csv(
+        out_dir / "full_data_top50_publication_bic.csv", index=False
+    )
     print(
         f"Overall full-data winner: {overall_winner['families']} lambda={overall_winner['lambda']} "
-        f"BIC={overall_winner['bic']:.3f}",
+        f"refit BIC={overall_winner['selection_bic']:.3f}",
         flush=True,
     )
+    if not publication_usable.empty:
+        publication_winner = publication_usable.iloc[0]
+        print(
+            f"Publication-eligible winner: {publication_winner['families']} "
+            f"lambda={publication_winner['lambda']} "
+            f"refit BIC={publication_winner['selection_bic']:.3f}",
+            flush=True,
+        )
 
-    final_penalized, selected_lambda, selected_init = _fit_penalized_path(
+    final_penalized, final_refit, masks, selected_lambda, selected_init = _fit_selection_path(
         y=y_full,
         X=X_full,
         families=bootstrap_families,
@@ -651,19 +718,10 @@ def main() -> None:
         max_iter=max_iter,
         tol=tol,
         n_starts=leaderboard_starts,
+        refit_n_starts=max(refit_starts, 3),
+        active_threshold=active_threshold,
+        min_active_per_component=min_active_per_component,
         seed=seed + 100000,
-    )
-    masks = _support_masks(final_penalized, active_threshold)
-    final_refit = _post_lasso_refit(
-        y=y_full,
-        X=X_full,
-        families=bootstrap_families,
-        masks=masks,
-        preferred_init=selected_init,
-        max_iter=max_iter,
-        tol=tol,
-        n_starts=max(refit_starts, 3),
-        seed=seed + 200000,
     )
     (out_dir / "selected_penalized_model.json").write_text(
         json.dumps(
