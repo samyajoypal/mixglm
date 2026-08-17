@@ -50,16 +50,26 @@ def _parse_float_list(env_name, default):
     return [float(x.strip()) for x in raw.split(",") if x.strip()]
 
 
+def _parse_string_list(env_name, default):
+    raw = os.environ.get(env_name)
+    if raw is None:
+        return list(default)
+    if raw.strip() == "":
+        return []
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
 SAMPLE_SIZES = _parse_int_list("MIXGLM_SAMPLE_SIZES", [500, 1000, 1500])
 SCENARIO_A_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_A_EXAMPLES", [1, 2, 3, 4])
 SCENARIO_B_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_B_EXAMPLES", [1, 2, 4])
 SCENARIO_C_EXAMPLES = _parse_int_list("MIXGLM_SCENARIO_C_EXAMPLES", [1, 2, 4])
-LAMBDA_GRID = _parse_float_list("MIXGLM_LAMBDA_GRID", [0.25, 0.5, 1, 2, 5, 10, 20, 50])
+LAMBDA_GRID = _parse_float_list("MIXGLM_LAMBDA_GRID", [0, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20])
 SCENARIO_B_N = int(os.environ.get("MIXGLM_SCENARIO_B_N", 1000))
 SCENARIO_B_P = int(os.environ.get("MIXGLM_SCENARIO_B_P", 20))
 SCENARIO_A_BEAM_WIDTH = int(os.environ.get("MIXGLM_SCENARIO_A_BEAM_WIDTH", 10))
 SCENARIO_C_N_STARTS = int(os.environ.get("MIXGLM_SCENARIO_C_N_STARTS", 2))
 SCENARIO_C_MAX_ITER = int(os.environ.get("MIXGLM_SCENARIO_C_MAX_ITER", 100))
+SCENARIO_C_INITS = _parse_string_list("MIXGLM_SCENARIO_C_INITS", [])
 
 # Boundary-equivalent classes are reported separately from strict recovery.
 BOUNDARY_EQUIV_CLASSES = {
@@ -156,6 +166,33 @@ def mcse_rate(x) -> float:
         return np.nan
     p = float(np.mean(vals))
     return float(np.sqrt(p * (1.0 - p) / vals.size))
+
+
+def summarize_scenario_c(df, group_columns):
+    rows = []
+    group_key = group_columns[0] if len(group_columns) == 1 else group_columns
+    for keys, group in df.groupby(group_key, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        replicate_coverage = group.groupby("seed")["coverage"].mean()
+        mcse = (
+            float(replicate_coverage.std(ddof=1) / np.sqrt(replicate_coverage.size))
+            if replicate_coverage.size > 1
+            else np.nan
+        )
+        row = dict(zip(group_columns, keys))
+        row.update({
+            "Mean_Abs_Bias": float(group["abs_bias"].mean()),
+            "Parameter_RMSE": float(np.sqrt(group["squared_error"].mean())),
+            "Mean_SE": float(group["se"].mean()),
+            "SE_Success": float(group["se_success"].mean()),
+            "Coverage": float(group["coverage"].mean()),
+            "Coverage_MCSE": mcse,
+            "CI_Length": float(group["ci_len"].mean()),
+            "Replicates": int(replicate_coverage.size),
+        })
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def median_positive_rank(x) -> float:
@@ -534,61 +571,159 @@ def run_scenario_b(example_id, seed):
 
     return {"selected": selected, "path": candidate_rows}
 
-def run_scenario_c(example_id, n, seed):
-    if example_id not in SCENARIO_C_EXAMPLES: return []
-    rng = np.random.default_rng(seed)
-    sim, X, kind, comps, pi_true, families_true = setup_example(example_id, n, 5, sparsity=False, rng=rng)
-
-    mc = [ComponentSpec(family=FAMILIES.create(c.name), link=c.link, penalty=PENALTIES.create("none")) for c in comps]
-    model = MixtureGLM(components=mc)
-    model.fit(y=sim.y, X=X, max_iter=SCENARIO_C_MAX_ITER, tol=1e-4,
-              n_starts=SCENARIO_C_N_STARTS, seed=seed,
-              init=init_for_kind(kind), standardize=True, verbose=False)
-
-    if model.result_ is None or not model.result_.converged: return []
-
-    methods = [
-        m.strip().lower()
-        for m in os.environ.get("MIXGLM_INFERENCE_METHODS", "louis,numeric").split(",")
-        if m.strip()
+def _scenario_c_components(comps):
+    return [
+        ComponentSpec(
+            family=FAMILIES.create(comp.name),
+            link=comp.link,
+            penalty=PENALTIES.create("none"),
+        )
+        for comp in comps
     ]
 
-    scaler = model.scaler_
-    def to_fit_scale(b_raw):
-        if scaler is None: return b_raw
-        return scaler.beta_to_fit_scale(b_raw)
 
-    b0t_fit = to_fit_scale(comps[0].beta)
-    b1t_fit = to_fit_scale(comps[1].beta)
+def _fit_scenario_c(sim, X, kind, comps, seed):
+    inits = SCENARIO_C_INITS or [init_for_kind(kind)]
+    candidates = []
+    diagnostics = {}
+    for index, init in enumerate(inits):
+        starts = 1 if init.startswith("quantile") else SCENARIO_C_N_STARTS
+        try:
+            model = MixtureGLM(components=_scenario_c_components(comps))
+            model.fit(
+                y=sim.y,
+                X=X,
+                max_iter=SCENARIO_C_MAX_ITER,
+                tol=1e-4,
+                n_starts=starts,
+                seed=seed + 100000 * index,
+                init=init,
+                standardize=True,
+                verbose=False,
+            )
+            result = model.result_
+            diagnostics[init] = {
+                "converged": bool(result is not None and result.converged),
+                "loglik": float(result.loglik) if result is not None else None,
+                "n_iter": int(result.n_iter) if result is not None else None,
+                "n_starts": starts,
+            }
+            if result is not None and result.converged and np.isfinite(result.loglik):
+                candidates.append((float(result.loglik), init, starts, model))
+        except Exception as exc:
+            diagnostics[init] = {
+                "converged": False,
+                "error": str(exc)[:200],
+                "n_starts": starts,
+            }
+    if not candidates:
+        return None, None, None, diagnostics
+    _, selected_init, selected_starts, model = max(candidates, key=lambda item: item[0])
+    return model, selected_init, selected_starts, diagnostics
+
+
+def _true_extra_params(comp, component_index):
+    name = comp.name
+    extra = comp.extra
+    prefix = f"extra[{component_index}]"
+    if name == "gaussian":
+        return {f"{prefix}.log_sigma2_t": float(np.log(extra["sigma"] ** 2))}
+    if name == "student_t":
+        return {
+            f"{prefix}.log_sigma_t": float(np.log(extra["scale"])),
+            f"{prefix}.log_nu_m2_t": float(np.log(extra["df"] - 2.0)),
+        }
+    if name == "gamma":
+        return {f"{prefix}.log_shape_t": float(np.log(extra["shape"]))}
+    if name == "lognormal":
+        return {f"{prefix}.log_sigma_t": float(np.log(extra["sigma"]))}
+    if name == "nb2":
+        return {f"{prefix}.log_alpha_t": float(np.log(extra["alpha"]))}
+    if name == "zip":
+        theta = float(extra["theta"])
+        return {f"{prefix}.logit_theta_t": float(np.log(theta / (1.0 - theta)))}
+    return {}
+
+
+def _scenario_c_parameter_type(param):
+    if param.startswith("eta_pi"):
+        return "mixing"
+    if param.startswith("beta"):
+        return "regression"
+    return "nuisance"
+
+
+def run_scenario_c(example_id, n, seed):
+    if example_id not in SCENARIO_C_EXAMPLES:
+        return []
+    rng = np.random.default_rng(seed)
+    sim, X, kind, comps, pi_true, families_true = setup_example(
+        example_id, n, 5, sparsity=False, rng=rng
+    )
+    model, selected_init, selected_starts, candidate_diagnostics = _fit_scenario_c(
+        sim, X, kind, comps, seed
+    )
+    candidate_json = json.dumps(candidate_diagnostics, sort_keys=True)
+    if model is None or model.result_ is None:
+        return [{
+            "scenario": "C",
+            "example_id": example_id,
+            "n": n,
+            "seed": seed,
+            "candidate_fits": candidate_json,
+            "error": "No Scenario C initialization converged.",
+        }]
+
+    methods = [
+        method.strip().lower()
+        for method in os.environ.get("MIXGLM_INFERENCE_METHODS", "louis,numeric").split(",")
+        if method.strip()
+    ]
+    scaler = model.scaler_
+
+    def to_fit_scale(beta_raw):
+        if scaler is None:
+            return np.asarray(beta_raw, dtype=float)
+        return scaler.beta_to_fit_scale(beta_raw)
 
     betas_hat = model.betas_original_scale()
-    direct_distance = float(
-        np.linalg.norm(comps[0].beta - betas_hat[0])
-        + np.linalg.norm(comps[1].beta - betas_hat[1])
-    )
+    direct_distance = float(sum(
+        np.linalg.norm(comps[k].beta - betas_hat[k]) for k in range(len(comps))
+    ))
     crossed_distance = float(
         np.linalg.norm(comps[0].beta - betas_hat[1])
         + np.linalg.norm(comps[1].beta - betas_hat[0])
     )
-    # Components with different families are intrinsically labelled by family.
+    # Heterogeneous components are labelled by family; homogeneous components may swap.
     swapped = bool(families_true[0] == families_true[1] and crossed_distance < direct_distance)
+    component_map = {0: 1, 1: 0} if swapped else {0: 0, 1: 1}
+    pi_adjusted = pi_true[::-1] if swapped else pi_true
 
-    true_params = {}
-    for j in range(5):
-        true_params[f"beta[0][{j}]"] = float(b0t_fit[j])
-        true_params[f"beta[1][{j}]"] = float(b1t_fit[j])
-    for k in range(2):
-        for name, val in comps[k].extra.items():
-            true_params[f"{name}[{k}]"] = float(val)
+    true_params = {
+        "eta_pi[0]": float(np.log(pi_adjusted[0]) - np.log(pi_adjusted[1]))
+    }
+    for true_k, estimated_k in component_map.items():
+        beta_fit = to_fit_scale(comps[true_k].beta)
+        for j, value in enumerate(beta_fit):
+            true_params[f"beta[{estimated_k}][{j}]"] = float(value)
+        true_params.update(_true_extra_params(comps[true_k], estimated_k))
 
-    true_params_adj = {}
-    if swapped:
-        for k_true, k_est in [(0, 1), (1, 0)]:
-            for j in range(5): true_params_adj[f"beta[{k_est}][{j}]"] = true_params[f"beta[{k_true}][{j}]"]
-            for name in comps[k_true].extra.keys(): true_params_adj[f"{name}[{k_est}]"] = true_params[f"{name}[{k_true}]"]
-    else:
-        true_params_adj = true_params
-
+    common = {
+        "scenario": "C",
+        "example_id": example_id,
+        "n": n,
+        "seed": seed,
+        "fit_loglik": float(model.result_.loglik),
+        "fit_n_iter": int(model.result_.n_iter),
+        "fit_min_pi": float(np.min(model.result_.pi)),
+        "alignment_swapped": swapped,
+        "allocation_mode": "crossed" if crossed_distance < direct_distance else "direct",
+        "direct_beta_distance": direct_distance,
+        "crossed_beta_distance": crossed_distance,
+        "selected_init": selected_init,
+        "n_starts": selected_starts,
+        "candidate_fits": candidate_json,
+    }
     results = []
     for method in methods:
         try:
@@ -598,22 +733,8 @@ def run_scenario_c(example_id, n, seed):
                 method=method,
                 louis_derivative_method="auto",
             )
-        except Exception as e:
-            results.append({
-                "scenario": "C",
-                "example_id": example_id,
-                "n": n,
-                    "seed": seed,
-                    "method": method,
-                    "fit_loglik": float(model.result_.loglik),
-                    "fit_n_iter": int(model.result_.n_iter),
-                    "fit_min_pi": float(np.min(model.result_.pi)),
-                    "alignment_swapped": swapped,
-                    "direct_beta_distance": direct_distance,
-                    "crossed_beta_distance": crossed_distance,
-                    "n_starts": SCENARIO_C_N_STARTS,
-                    "error": str(e)[:200],
-            })
+        except Exception as exc:
+            results.append({**common, "method": method, "error": str(exc)[:200]})
             continue
 
         if method == "numeric":
@@ -621,31 +742,33 @@ def run_scenario_c(example_id, n, seed):
             se_message = str(getattr(se_res, "message", ""))
             derivative_sources = None
         else:
-            se_success = bool(getattr(se_res, "cov", None) is not None and getattr(se_res, "se", None) is not None)
+            se_success = bool(
+                getattr(se_res, "cov", None) is not None
+                and getattr(se_res, "se", None) is not None
+            )
             se_message = "Louis observed information"
             derivative_sources = getattr(se_res, "derivative_sources", None)
 
         for _, row in df_inf.iterrows():
-            param = row['param']
-            if param in true_params_adj:
-                truth = true_params_adj[param]
-                covers = bool(row['ci2.5%'] <= truth <= row['ci97.5%'])
-                results.append({
-                    "scenario": "C", "example_id": example_id, "n": n, "seed": seed,
-                    "method": method,
-                    "se_success": se_success,
-                    "se_message": se_message,
-                    "derivative_sources": derivative_sources,
-                    "fit_loglik": float(model.result_.loglik),
-                    "fit_n_iter": int(model.result_.n_iter),
-                    "fit_min_pi": float(np.min(model.result_.pi)),
-                    "alignment_swapped": swapped,
-                    "direct_beta_distance": direct_distance,
-                    "crossed_beta_distance": crossed_distance,
-                    "n_starts": SCENARIO_C_N_STARTS,
-                    "param": param, "truth": float(truth), "estimate": float(row['estimate']), "se": float(row['se']),
-                    "coverage": float(covers), "ci_len": float(row['ci97.5%'] - row['ci2.5%'])
-                })
+            param = row["param"]
+            if param not in true_params:
+                continue
+            truth = true_params[param]
+            covers = bool(row["ci2.5%"] <= truth <= row["ci97.5%"])
+            results.append({
+                **common,
+                "method": method,
+                "se_success": se_success,
+                "se_message": se_message,
+                "derivative_sources": derivative_sources,
+                "param": param,
+                "parameter_type": _scenario_c_parameter_type(param),
+                "truth": float(truth),
+                "estimate": float(row["estimate"]),
+                "se": float(row["se"]),
+                "coverage": float(covers),
+                "ci_len": float(row["ci97.5%"] - row["ci2.5%"]),
+            })
     return results
 
 def process_task(task_type, args, cache_dir):
@@ -724,15 +847,19 @@ def generate_latex_and_plots(resA, resB, resC):
             pd.DataFrame(path_rows).to_csv(os.path.join(OUTPUT_ROOT, "scenario_B_lambda_paths.csv"), index=False)
 
     if resC:
+        all_c_rows = [
+            item for sublist in resC for item in sublist if isinstance(item, dict)
+        ]
         dfC = pd.DataFrame([
-            item for sublist in resC for item in sublist
-            if isinstance(item, dict) and "error" not in item and "param" in item
+            item for item in all_c_rows if "error" not in item and "param" in item
         ])
         if not dfC.empty:
             if "method" not in dfC.columns:
                 dfC["method"] = "numeric"
             if "se_success" not in dfC.columns:
                 dfC["se_success"] = np.nan
+            if "parameter_type" not in dfC.columns:
+                dfC["parameter_type"] = dfC["param"].map(_scenario_c_parameter_type)
             dfC["abs_bias"] = np.abs(dfC["estimate"] - dfC["truth"])
             dfC["squared_error"] = (dfC["estimate"] - dfC["truth"]) ** 2
             aggC = dfC.groupby(['example_id', 'n', 'method', 'param']).agg(
@@ -749,15 +876,10 @@ def generate_latex_and_plots(resA, resB, resC):
             with open(os.path.join(OUTPUT_ROOT, "table_scenario_C.tex"), "w") as f: f.write(texC)
             with open(os.path.join(OUTPUT_ROOT, "table_scenario_C_supp.tex"), "w") as f: f.write(texC)
 
-            aggC_main = dfC.groupby(['example_id', 'n', 'method']).agg(
-                Mean_Abs_Bias=('abs_bias', 'mean'),
-                Parameter_RMSE=('squared_error', lambda x: float(np.sqrt(np.mean(x)))),
-                Mean_SE=('se', 'mean'),
-                SE_Success=('se_success', 'mean'),
-                Coverage=('coverage', 'mean'),
-                Coverage_MCSE=('coverage', mcse_rate),
-                CI_Length=('ci_len', 'mean')
-            ).reset_index()
+            regression = dfC[dfC["parameter_type"] == "regression"]
+            aggC_main = summarize_scenario_c(
+                regression, ["example_id", "n", "method"]
+            )
             aggC_main.to_csv(os.path.join(OUTPUT_ROOT, "table_scenario_C_main.csv"), index=False)
             texC_main = dataframe_to_latex(
                 aggC_main,
@@ -767,6 +889,48 @@ def generate_latex_and_plots(resA, resB, resC):
             )
             with open(os.path.join(OUTPUT_ROOT, "table_scenario_C_main.tex"), "w") as f:
                 f.write(texC_main)
+
+            aggC_full = summarize_scenario_c(
+                dfC, ["example_id", "n", "method", "parameter_type"]
+            )
+            aggC_full.to_csv(
+                os.path.join(OUTPUT_ROOT, "table_scenario_C_full_summary.csv"),
+                index=False,
+            )
+            texC_full = dataframe_to_latex(
+                aggC_full,
+                float_format="%.3f",
+                caption="Scenario C: inference by parameter class",
+                label="tab:scen_c_full",
+            )
+            with open(os.path.join(OUTPUT_ROOT, "table_scenario_C_full_summary.tex"), "w") as f:
+                f.write(texC_full)
+
+            diagnostic_columns = [
+                "example_id", "n", "seed", "fit_loglik", "fit_n_iter", "fit_min_pi",
+                "allocation_mode", "alignment_swapped", "direct_beta_distance",
+                "crossed_beta_distance", "selected_init", "n_starts", "candidate_fits",
+            ]
+            available = [column for column in diagnostic_columns if column in dfC.columns]
+            diagnostics = (
+                dfC[available]
+                .drop_duplicates(subset=["example_id", "n", "seed"])
+                .sort_values(["example_id", "n", "seed"])
+            )
+            diagnostics.to_csv(
+                os.path.join(OUTPUT_ROOT, "scenario_C_fit_diagnostics.csv"), index=False
+            )
+            if "allocation_mode" in diagnostics.columns:
+                mode_summary = (
+                    diagnostics.groupby(["example_id", "n", "allocation_mode"], as_index=False)
+                    .size()
+                    .rename(columns={"size": "count"})
+                )
+                totals = mode_summary.groupby(["example_id", "n"])["count"].transform("sum")
+                mode_summary["frequency"] = mode_summary["count"] / totals
+                mode_summary.to_csv(
+                    os.path.join(OUTPUT_ROOT, "scenario_C_mode_summary.csv"), index=False
+                )
 
     if resA:
         top_bic_all = []
@@ -877,6 +1041,7 @@ def main():
         "scenario_A_beam_width": SCENARIO_A_BEAM_WIDTH,
         "scenario_C_n_starts": SCENARIO_C_N_STARTS,
         "scenario_C_max_iter": SCENARIO_C_MAX_ITER,
+        "scenario_C_inits": SCENARIO_C_INITS,
         "lambda_grid": LAMBDA_GRID,
         "inference_methods": os.environ.get("MIXGLM_INFERENCE_METHODS", "louis,numeric"),
         "created_unix_time": time.time(),

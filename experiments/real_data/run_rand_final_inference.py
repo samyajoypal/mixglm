@@ -372,13 +372,31 @@ def _conditional_louis(
     return table, _jsonable(diagnostics)
 
 
+def _bootstrap_indices(
+    rng: np.random.Generator,
+    n: int,
+    groups: np.ndarray | None,
+) -> Tuple[np.ndarray, str, int]:
+    if groups is None:
+        return rng.integers(0, int(n), size=int(n)), "observation", int(n)
+    groups = np.asarray(groups)
+    if groups.shape != (int(n),):
+        raise ValueError(f"groups must have shape ({int(n)},); got {groups.shape}.")
+    unique_groups = np.unique(groups)
+    sampled_groups = rng.choice(unique_groups, size=unique_groups.size, replace=True)
+    blocks = [np.flatnonzero(groups == group) for group in sampled_groups]
+    return np.concatenate(blocks), "participant_group", int(unique_groups.size)
+
+
 def _bootstrap_one(
     *,
     replicate: int,
     replicate_seed: int,
     X_all: np.ndarray,
     y_all: np.ndarray,
+    groups_all: np.ndarray | None,
     all_feature_names: Sequence[str],
+    data_kind: str,
     families: Tuple[str, ...],
     lambdas: Sequence[float],
     inits: Sequence[str],
@@ -388,6 +406,7 @@ def _bootstrap_one(
     n_starts: int,
     refit_n_starts: int,
     active_threshold: float,
+    min_active_per_component: int,
     cache_dir: Path,
 ) -> Dict[str, Any]:
     _register()
@@ -398,14 +417,16 @@ def _bootstrap_one(
     started = time.time()
     try:
         rng = np.random.default_rng(replicate_seed)
-        indices = rng.integers(0, y_all.shape[0], size=y_all.shape[0])
+        indices, resampling_unit, n_sampled_units = _bootstrap_indices(
+            rng, y_all.shape[0], groups_all
+        )
         X_boot_raw = X_all[indices]
         y_boot = y_all[indices]
         X_boot, names_boot, keep_idx = screen_features(
             X_boot_raw,
             y_boot,
             all_feature_names,
-            kind="count",
+            kind=data_kind,
             p_screen=p_screen,
         )
         penalized, refit, masks, selected_lambda, selected_init = _fit_selection_path(
@@ -419,7 +440,7 @@ def _bootstrap_one(
             n_starts=n_starts,
             refit_n_starts=refit_n_starts,
             active_threshold=active_threshold,
-            min_active_per_component=1,
+            min_active_per_component=min_active_per_component,
             seed=replicate_seed + 100,
         )
         if penalized.result_ is None or refit.result_ is None:
@@ -432,6 +453,9 @@ def _bootstrap_one(
             "seed": int(replicate_seed),
             "success": True,
             "error": "",
+            "resampling_unit": resampling_unit,
+            "n_sampled_units": n_sampled_units,
+            "n_bootstrap_observations": int(indices.size),
             "selected_lambda": float(selected_lambda),
             "selected_init": selected_init,
             "penalized_bic": float(penalized.result_.bic),
@@ -594,8 +618,13 @@ def main() -> None:
     min_active_per_component = int(
         os.environ.get("MIXGLM_INFERENCE_MIN_ACTIVE_PER_COMPONENT", "1")
     )
-    bootstrap_families = tuple(
-        _parse_csv(os.environ.get("MIXGLM_INFERENCE_BOOTSTRAP_FAMILIES", "poisson,nb2"))
+    bootstrap_family_request = os.environ.get(
+        "MIXGLM_INFERENCE_BOOTSTRAP_FAMILIES", "poisson,nb2"
+    ).strip()
+    bootstrap_families = (
+        None
+        if bootstrap_family_request.lower() == "auto"
+        else tuple(_parse_csv(bootstrap_family_request))
     )
     seed = int(os.environ.get("MIXGLM_INFERENCE_SEED", "20260703"))
     n_jobs = int(os.environ.get("SLURM_CPUS_PER_TASK", os.environ.get("MIXGLM_INFERENCE_N_JOBS", "1")))
@@ -613,13 +642,15 @@ def main() -> None:
         p_screen=p_screen,
     )
     y_full = np.asarray(spec.y, dtype=float)
-    np.savez_compressed(
-        out_dir / "full_data_design.npz",
-        X=X_full,
-        y=y_full,
-        feature_names=np.asarray(feature_names, dtype=object),
-        keep_idx=np.asarray(keep_idx, dtype=int),
-    )
+    design_payload = {
+        "X": X_full,
+        "y": y_full,
+        "feature_names": np.asarray(feature_names, dtype=object),
+        "keep_idx": np.asarray(keep_idx, dtype=int),
+    }
+    if spec.groups is not None:
+        design_payload["groups"] = np.asarray(spec.groups)
+    np.savez_compressed(out_dir / "full_data_design.npz", **design_payload)
 
     metadata = {
         "dataset": dataset,
@@ -637,15 +668,17 @@ def main() -> None:
         "bootstrap_reps": bootstrap_reps,
         "min_active_per_component": min_active_per_component,
         "selection_rule": "minimum active-set refit BIC subject to the active-component gate",
-        "bootstrap_families": bootstrap_families,
+        "bootstrap_families_requested": bootstrap_family_request,
         "leaderboard_families": leaderboard_families,
         "leaderboard_k_max": leaderboard_k_max,
-        "bootstrap_scope": "family fixed after repeated-split validation; screening, lambda, and support reselected",
+        "bootstrap_scope": "screening, lambda, and support reselected within every replicate",
+        "bootstrap_resampling_unit": (
+            "participant_group" if spec.groups is not None else "observation"
+        ),
+        "n_groups": int(np.unique(spec.groups).size) if spec.groups is not None else None,
         "seed": seed,
         "n_jobs": n_jobs,
     }
-    (out_dir / "run_metadata.json").write_text(json.dumps(_jsonable(metadata), indent=2))
-
     combos = family_tuples(leaderboard_families, k_max=leaderboard_k_max, k_min=1)
     tasks: List[Dict[str, Any]] = []
     for families in combos:
@@ -700,6 +733,7 @@ def main() -> None:
         f"refit BIC={overall_winner['selection_bic']:.3f}",
         flush=True,
     )
+    publication_winner = None
     if not publication_usable.empty:
         publication_winner = publication_usable.iloc[0]
         print(
@@ -708,6 +742,15 @@ def main() -> None:
             f"refit BIC={publication_winner['selection_bic']:.3f}",
             flush=True,
         )
+
+    if bootstrap_families is None:
+        if publication_winner is None:
+            raise RuntimeError(
+                "Automatic bootstrap-family selection found no publication-eligible model."
+            )
+        bootstrap_families = tuple(str(publication_winner["families"]).split("+"))
+    metadata["bootstrap_families_selected"] = bootstrap_families
+    (out_dir / "run_metadata.json").write_text(json.dumps(_jsonable(metadata), indent=2))
 
     final_penalized, final_refit, masks, selected_lambda, selected_init = _fit_selection_path(
         y=y_full,
@@ -771,7 +814,9 @@ def main() -> None:
             replicate_seed=int(replicate_seeds[b]),
             X_all=np.asarray(spec.X, dtype=float),
             y_all=y_full,
+            groups_all=None if spec.groups is None else np.asarray(spec.groups),
             all_feature_names=spec.feature_names,
+            data_kind=spec.kind,
             families=bootstrap_families,
             lambdas=lambdas,
             inits=inits,
@@ -781,6 +826,7 @@ def main() -> None:
             n_starts=bootstrap_starts,
             refit_n_starts=refit_starts,
             active_threshold=active_threshold,
+            min_active_per_component=min_active_per_component,
             cache_dir=bootstrap_cache,
         )
         for b in range(bootstrap_reps)
