@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -237,7 +238,9 @@ def _post_lasso_refit(
     n_starts: int,
     seed: int,
 ) -> MixtureGLM:
-    init_order = list(dict.fromkeys([preferred_init, "kmeans_glm", "quantile_glm"]))
+    init_order = list(
+        dict.fromkeys([preferred_init, "kmeans_glm", "quantile_glm", "random"])
+    )
     best: MixtureGLM | None = None
     best_loglik = -np.inf
     for j, init in enumerate(init_order):
@@ -249,7 +252,7 @@ def _post_lasso_refit(
                 max_iter=max_iter,
                 tol=tol,
                 n_starts=n_starts,
-                seed=seed + j,
+                seed=seed + 1000 + j,
                 init=init,
                 standardize=True,
                 compute_icl=False,
@@ -264,6 +267,113 @@ def _post_lasso_refit(
     if best is None:
         raise RuntimeError("Component-specific post-lasso refit failed.")
     return best
+
+
+def _masks_from_leaderboard_row(
+    row: pd.Series,
+    *,
+    p: int,
+    n_components: int,
+) -> List[Tuple[bool, ...]]:
+    active_sets_value = row["active_sets"]
+    active_sets_parsed = (
+        json.loads(active_sets_value)
+        if isinstance(active_sets_value, str)
+        else active_sets_value
+    )
+    if len(active_sets_parsed) != int(n_components):
+        raise ValueError("Leaderboard active sets do not match the selected component count.")
+    masks: List[Tuple[bool, ...]] = []
+    for active in active_sets_parsed:
+        mask = np.zeros(int(p), dtype=bool)
+        mask[0] = True
+        indices = np.asarray(active, dtype=int)
+        if indices.size and (indices.min() < 1 or indices.max() >= int(p)):
+            raise ValueError("Leaderboard active-set index is outside the fitted design.")
+        mask[indices] = True
+        masks.append(tuple(bool(value) for value in mask))
+    return masks
+
+
+def _fit_leaderboard_winner(
+    *,
+    row: pd.Series,
+    y: np.ndarray,
+    X: np.ndarray,
+    max_iter: int,
+    tol: float,
+    leaderboard_starts: int,
+    refit_n_starts: int,
+    refit_batches: int,
+    active_threshold: float,
+) -> Tuple[MixtureGLM, MixtureGLM, List[Tuple[bool, ...]], Tuple[str, ...], float, str]:
+    families = tuple(str(row["families"]).split("+"))
+    selected_lambda = float(row["lambda"])
+    selected_init = str(row["init"])
+    selected_seed = int(row["seed"])
+    masks = _masks_from_leaderboard_row(
+        row, p=X.shape[1], n_components=len(families)
+    )
+
+    penalized = MixtureGLM(make_components(families, selected_lambda))
+    penalized.fit(
+        y,
+        X,
+        max_iter=max_iter,
+        tol=tol,
+        n_starts=leaderboard_starts,
+        seed=selected_seed,
+        init=selected_init,
+        standardize=True,
+        compute_icl=False,
+        verbose=False,
+    )
+    if penalized.result_ is None or not penalized.result_.converged:
+        raise RuntimeError("The selected leaderboard penalized fit could not be reproduced.")
+    reproduced_masks = _support_masks(penalized, active_threshold)
+    if reproduced_masks != masks:
+        raise RuntimeError("The selected leaderboard support could not be reproduced exactly.")
+
+    best_refit: MixtureGLM | None = None
+    best_loglik = -np.inf
+    target_loglik = float(row["selection_loglik_train"])
+    tolerance = max(1e-4, 1e-8 * abs(target_loglik))
+    for batch in range(max(1, int(refit_batches))):
+        try:
+            refit = _post_lasso_refit(
+                y=y,
+                X=X,
+                families=families,
+                masks=masks,
+                preferred_init=selected_init,
+                max_iter=max_iter,
+                tol=tol,
+                n_starts=refit_n_starts,
+                seed=selected_seed + 100000 * batch,
+            )
+            if refit.result_ is not None and refit.result_.loglik > best_loglik:
+                best_refit = refit
+                best_loglik = float(refit.result_.loglik)
+            if np.isfinite(target_loglik) and best_loglik >= target_loglik - tolerance:
+                break
+        except Exception:
+            continue
+    if best_refit is None or best_refit.result_ is None:
+        raise RuntimeError("The selected leaderboard active-set refit could not be reproduced.")
+
+    if np.isfinite(target_loglik) and best_loglik < target_loglik - tolerance:
+        raise RuntimeError(
+            "Final active-set refit is inferior to the leaderboard winner: "
+            f"{best_loglik:.6f} < {target_loglik:.6f}."
+        )
+    return (
+        penalized,
+        best_refit,
+        masks,
+        families,
+        selected_lambda,
+        selected_init,
+    )
 
 
 def _model_payload(
@@ -336,9 +446,21 @@ def _conditional_louis(
             free.append(idx)
 
     info = louis.info[np.ix_(free, free)]
-    cov = np.linalg.pinv(info, rcond=1e-10)
+    info_symmetric = 0.5 * (info + info.T)
+    eigenvalues = np.linalg.eigvalsh(info_symmetric)
+    rank = int(np.linalg.matrix_rank(info_symmetric))
+    condition_number = float(np.linalg.cond(info_symmetric))
+    information_valid = bool(
+        np.all(np.isfinite(eigenvalues))
+        and rank == int(info.shape[0])
+        and float(np.min(eigenvalues)) > 0.0
+    )
     estimates = louis.theta_hat[free]
-    se = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+    if information_valid:
+        cov = np.linalg.pinv(info_symmetric, rcond=1e-10)
+        se = np.sqrt(np.diag(cov))
+    else:
+        se = np.full(estimates.shape, np.nan, dtype=float)
     zcrit = float(norm.ppf(1.0 - alpha / 2.0))
     parameter_names = [louis.param_names[j] for j in free]
 
@@ -364,9 +486,16 @@ def _conditional_louis(
     )
     diagnostics = {
         "dimension": int(info.shape[0]),
-        "rank": int(np.linalg.matrix_rank(info)),
-        "condition_number": float(np.linalg.cond(info)),
-        "min_eigenvalue": float(np.min(np.linalg.eigvalsh(0.5 * (info + info.T)))),
+        "rank": rank,
+        "condition_number": condition_number,
+        "min_eigenvalue": float(np.min(eigenvalues)),
+        "max_eigenvalue": float(np.max(eigenvalues)),
+        "information_valid_for_wald": information_valid,
+        "warning": (
+            ""
+            if information_valid
+            else "Conditional Wald intervals withheld because observed information is not positive definite."
+        ),
         "derivative_sources": louis.derivative_sources,
     }
     return table, _jsonable(diagnostics)
@@ -388,6 +517,45 @@ def _bootstrap_indices(
     return np.concatenate(blocks), "participant_group", int(unique_groups.size)
 
 
+def _aligned_component_order(
+    *,
+    fitted_eta: np.ndarray,
+    fitted_pi: np.ndarray,
+    families: Sequence[str],
+    reference_eta: np.ndarray,
+    reference_pi: np.ndarray,
+) -> List[int]:
+    fitted_eta = np.asarray(fitted_eta, dtype=float)
+    fitted_pi = np.asarray(fitted_pi, dtype=float)
+    reference_eta = np.asarray(reference_eta, dtype=float)
+    reference_pi = np.asarray(reference_pi, dtype=float)
+    if fitted_eta.shape != reference_eta.shape:
+        raise ValueError("Reference and bootstrap component predictors have different shapes.")
+
+    order = list(range(len(families)))
+    eta_scale = max(float(np.std(reference_eta)), 1e-8)
+    for family in dict.fromkeys(families):
+        indices = [j for j, name in enumerate(families) if name == family]
+        if len(indices) < 2:
+            continue
+        best_permutation = tuple(indices)
+        best_cost = np.inf
+        for permutation in itertools.permutations(indices):
+            cost = 0.0
+            for reference_index, fitted_index in zip(indices, permutation):
+                eta_difference = fitted_eta[fitted_index] - reference_eta[reference_index]
+                cost += float(np.mean(eta_difference ** 2)) / (eta_scale ** 2)
+                cost += 0.05 * float(
+                    (fitted_pi[fitted_index] - reference_pi[reference_index]) ** 2
+                )
+            if cost < best_cost:
+                best_cost = cost
+                best_permutation = permutation
+        for reference_index, fitted_index in zip(indices, best_permutation):
+            order[reference_index] = fitted_index
+    return order
+
+
 def _bootstrap_one(
     *,
     replicate: int,
@@ -397,6 +565,8 @@ def _bootstrap_one(
     groups_all: np.ndarray | None,
     all_feature_names: Sequence[str],
     data_kind: str,
+    reference_eta: np.ndarray,
+    reference_pi: np.ndarray,
     families: Tuple[str, ...],
     lambdas: Sequence[float],
     inits: Sequence[str],
@@ -447,7 +617,25 @@ def _bootstrap_one(
             raise RuntimeError("Bootstrap fit returned no result.")
 
         name_to_original = {str(name): j for j, name in enumerate(all_feature_names)}
-        beta_input = refit.betas_original_scale()
+        beta_input_raw = refit.betas_original_scale()
+        beta_full = []
+        for beta in beta_input_raw:
+            expanded = np.zeros(len(all_feature_names), dtype=float)
+            for local_j, feature_name in enumerate(names_boot):
+                expanded[name_to_original[str(feature_name)]] = float(beta[local_j])
+            beta_full.append(expanded)
+        fitted_eta = np.vstack([X_all @ beta for beta in beta_full])
+        component_order = _aligned_component_order(
+            fitted_eta=fitted_eta,
+            fitted_pi=refit.result_.pi,
+            families=families,
+            reference_eta=reference_eta,
+            reference_pi=reference_pi,
+        )
+        beta_input = [beta_input_raw[j] for j in component_order]
+        ordered_masks = [masks[j] for j in component_order]
+        ordered_pi = [refit.result_.pi[j] for j in component_order]
+        ordered_extras = [refit.result_.extras[j] for j in component_order]
         row: Dict[str, Any] = {
             "replicate": int(replicate),
             "seed": int(replicate_seed),
@@ -456,6 +644,7 @@ def _bootstrap_one(
             "resampling_unit": resampling_unit,
             "n_sampled_units": n_sampled_units,
             "n_bootstrap_observations": int(indices.size),
+            "component_permutation": json.dumps(component_order),
             "selected_lambda": float(selected_lambda),
             "selected_init": selected_init,
             "penalized_bic": float(penalized.result_.bic),
@@ -466,13 +655,15 @@ def _bootstrap_one(
             "active_original_indices": json.dumps(
                 [
                     [name_to_original[str(names_boot[j])] for j, flag in enumerate(mask) if flag and j > 0]
-                    for mask in masks
+                    for mask in ordered_masks
                 ]
             ),
-            "active_counts": json.dumps([int(sum(mask) - 1) for mask in masks]),
+            "active_counts": json.dumps(
+                [int(sum(mask) - 1) for mask in ordered_masks]
+            ),
             "seconds": float(time.time() - started),
         }
-        for k, weight in enumerate(refit.result_.pi):
+        for k, weight in enumerate(ordered_pi):
             row[f"pi_{k}"] = float(weight)
         for k, beta in enumerate(beta_input):
             row[f"intercept_{k}"] = float(beta[0])
@@ -480,9 +671,9 @@ def _bootstrap_one(
                 row[f"beta_{k}_{original_j}"] = 0.0
             for local_j in range(1, len(names_boot)):
                 original_j = name_to_original[str(names_boot[local_j])]
-                if masks[k][local_j]:
+                if ordered_masks[k][local_j]:
                     row[f"beta_{k}_{original_j}"] = float(beta[local_j])
-        for k, extra in enumerate(refit.result_.extras):
+        for k, extra in enumerate(ordered_extras):
             for name, value in extra.items():
                 row[f"extra_{k}_{name}"] = float(value)
                 if name == "log_alpha":
@@ -613,6 +804,12 @@ def main() -> None:
     leaderboard_starts = int(os.environ.get("MIXGLM_INFERENCE_LEADERBOARD_STARTS", "2"))
     bootstrap_starts = int(os.environ.get("MIXGLM_INFERENCE_BOOTSTRAP_STARTS", "1"))
     refit_starts = int(os.environ.get("MIXGLM_INFERENCE_REFIT_STARTS", "2"))
+    final_refit_starts = int(
+        os.environ.get("MIXGLM_INFERENCE_FINAL_REFIT_STARTS", "5")
+    )
+    final_refit_batches = int(
+        os.environ.get("MIXGLM_INFERENCE_FINAL_REFIT_BATCHES", "3")
+    )
     active_threshold = float(os.environ.get("MIXGLM_INFERENCE_ACTIVE_THRESHOLD", "1e-5"))
     bootstrap_reps = int(os.environ.get("MIXGLM_INFERENCE_BOOTSTRAP_REPS", "500"))
     min_active_per_component = int(
@@ -664,6 +861,8 @@ def main() -> None:
         "leaderboard_starts": leaderboard_starts,
         "bootstrap_starts": bootstrap_starts,
         "refit_starts": refit_starts,
+        "final_refit_starts": final_refit_starts,
+        "final_refit_batches": final_refit_batches,
         "active_threshold": active_threshold,
         "bootstrap_reps": bootstrap_reps,
         "min_active_per_component": min_active_per_component,
@@ -744,27 +943,58 @@ def main() -> None:
         )
 
     if bootstrap_families is None:
-        if publication_winner is None:
+        overall_is_eligible = bool(
+            overall_winner["nonidentical"]
+            and not overall_winner["has_intercept_only_component"]
+            and overall_winner["passes_active_component_gate"]
+        )
+        if not overall_is_eligible:
             raise RuntimeError(
-                "Automatic bootstrap-family selection found no publication-eligible model."
+                "The overall BIC winner is not a nonidentical model with active slopes "
+                "in every component; automatic inference will not substitute a runner-up."
             )
-        bootstrap_families = tuple(str(publication_winner["families"]).split("+"))
+        final_winner_row = overall_winner
+        bootstrap_families = tuple(str(final_winner_row["families"]).split("+"))
+    else:
+        requested_family_label = "+".join(bootstrap_families)
+        matching = usable[
+            (usable["families"] == requested_family_label)
+            & ~usable["has_intercept_only_component"]
+            & usable["passes_active_component_gate"]
+        ]
+        if matching.empty:
+            raise RuntimeError(
+                f"No eligible leaderboard model matches {requested_family_label}."
+            )
+        final_winner_row = matching.iloc[0]
     metadata["bootstrap_families_selected"] = bootstrap_families
+    metadata["selected_leaderboard_task"] = str(final_winner_row["task_id"])
+    metadata["selected_leaderboard_bic"] = float(final_winner_row["selection_bic"])
+    metadata["selected_leaderboard_loglik"] = float(
+        final_winner_row["selection_loglik_train"]
+    )
     (out_dir / "run_metadata.json").write_text(json.dumps(_jsonable(metadata), indent=2))
+    (out_dir / "selected_leaderboard_row.json").write_text(
+        json.dumps(_jsonable(final_winner_row.to_dict()), indent=2)
+    )
 
-    final_penalized, final_refit, masks, selected_lambda, selected_init = _fit_selection_path(
+    (
+        final_penalized,
+        final_refit,
+        masks,
+        bootstrap_families,
+        selected_lambda,
+        selected_init,
+    ) = _fit_leaderboard_winner(
+        row=final_winner_row,
         y=y_full,
         X=X_full,
-        families=bootstrap_families,
-        lambdas=lambdas,
-        inits=inits,
         max_iter=max_iter,
         tol=tol,
-        n_starts=leaderboard_starts,
-        refit_n_starts=max(refit_starts, 3),
+        leaderboard_starts=leaderboard_starts,
+        refit_n_starts=final_refit_starts,
+        refit_batches=final_refit_batches,
         active_threshold=active_threshold,
-        min_active_per_component=min_active_per_component,
-        seed=seed + 100000,
     )
     (out_dir / "selected_penalized_model.json").write_text(
         json.dumps(
@@ -801,10 +1031,22 @@ def main() -> None:
     )
     print(
         f"Selected {bootstrap_families} lambda={selected_lambda} init={selected_init}; "
-        f"active={[int(sum(m) - 1) for m in masks]}",
+        f"active={[int(sum(m) - 1) for m in masks]}; "
+        f"refit BIC={final_refit.result_.bic:.3f}",
         flush=True,
     )
 
+    reference_beta = final_refit.betas_original_scale()
+    reference_beta_full = []
+    for beta in reference_beta:
+        expanded = np.zeros(len(spec.feature_names), dtype=float)
+        for local_j, original_j in enumerate(keep_idx):
+            expanded[int(original_j)] = float(beta[local_j])
+        reference_beta_full.append(expanded)
+    reference_eta = np.vstack([
+        np.asarray(spec.X, dtype=float) @ beta for beta in reference_beta_full
+    ])
+    reference_pi = np.asarray(final_refit.result_.pi, dtype=float)
     seed_rng = np.random.default_rng(seed + 300000)
     replicate_seeds = seed_rng.integers(1, 2**31 - 1, size=bootstrap_reps)
     print(f"Selection-aware bootstrap: B={bootstrap_reps}", flush=True)
@@ -817,6 +1059,8 @@ def main() -> None:
             groups_all=None if spec.groups is None else np.asarray(spec.groups),
             all_feature_names=spec.feature_names,
             data_kind=spec.kind,
+            reference_eta=reference_eta,
+            reference_pi=reference_pi,
             families=bootstrap_families,
             lambdas=lambdas,
             inits=inits,

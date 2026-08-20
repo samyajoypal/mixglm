@@ -97,7 +97,14 @@ def prepare_parkinsons() -> None:
     data_path = os.path.join(out_dir, "parkinsons_updrs.data")
     df = pd.read_csv(data_path)
     target_col = "total_UPDRS"
-    drop_cols = ["subject#", "motor_UPDRS", target_col]
+    # DDP = 3 * RAP and DDA = 3 * APQ3 up to source-data rounding.
+    drop_cols = [
+        "subject#",
+        "motor_UPDRS",
+        target_col,
+        "Jitter:DDP",
+        "Shimmer:DDA",
+    ]
     y = pd.to_numeric(df[target_col], errors="coerce").to_numpy(dtype=float)
     groups = pd.to_numeric(df["subject#"], errors="coerce").to_numpy(dtype=float)
     X_df = df.drop(columns=[c for c in drop_cols if c in df.columns]).copy()

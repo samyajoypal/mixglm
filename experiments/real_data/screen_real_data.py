@@ -148,6 +148,16 @@ def _load_xy(stem: str) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     return X, y, _load_feature_names(stem, X.shape[1])
 
 
+def _drop_named_features(
+    X: np.ndarray,
+    feature_names: Sequence[str],
+    names_to_drop: Sequence[str],
+) -> Tuple[np.ndarray, List[str]]:
+    drop = set(names_to_drop)
+    keep = [j for j, name in enumerate(feature_names) if name not in drop]
+    return np.asarray(X)[:, keep], [str(feature_names[j]) for j in keep]
+
+
 def _load_auxiliary(stem: str, n: int) -> Tuple[np.ndarray | None, np.ndarray | None]:
     groups_path = os.path.join("data", f"{stem}_groups.npy")
     offset_path = os.path.join("data", f"{stem}_offset.npy")
@@ -203,6 +213,8 @@ def load_dataset(name: str) -> DatasetSpec:
         return DatasetSpec(key, "real", REAL_FAMILIES, X, np.log(y.astype(float)), names)
     if key == "parkinsons_raw":
         X, y, names = _load_xy("parkinsons")
+        # DDP and DDA are threefold transforms of RAP and APQ3, respectively.
+        X, names = _drop_named_features(X, names, ["Jitter:DDP", "Shimmer:DDA"])
         groups, offset = _load_auxiliary("parkinsons", X.shape[0])
         return DatasetSpec(
             key, "positive", POSITIVE_FAMILIES, X, y.astype(float), names,
@@ -210,6 +222,7 @@ def load_dataset(name: str) -> DatasetSpec:
         )
     if key == "parkinsons_log":
         X, y, names = _load_xy("parkinsons")
+        X, names = _drop_named_features(X, names, ["Jitter:DDP", "Shimmer:DDA"])
         groups, offset = _load_auxiliary("parkinsons", X.shape[0])
         return DatasetSpec(
             key, "real", REAL_FAMILIES, X, np.log(y.astype(float)), names,

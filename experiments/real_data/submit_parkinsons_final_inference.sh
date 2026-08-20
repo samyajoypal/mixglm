@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mixglm_park_infer
+#SBATCH --job-name=mixglm_park_infer_reduced
 #SBATCH --partition=epyc-256
 #SBATCH --output=logs/park_infer_%j.out
 #SBATCH --error=logs/park_infer_%j.err
@@ -20,7 +20,7 @@ export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
-export MIXGLM_INFERENCE_OUTPUT_ROOT=experiments/real_data/targeted_outputs/v5_parkinsons_final_inference
+export MIXGLM_INFERENCE_OUTPUT_ROOT=experiments/real_data/targeted_outputs/v6_parkinsons_reduced_final_20260820
 export MIXGLM_INFERENCE_DATASET=parkinsons_log
 export MIXGLM_INFERENCE_P_SCREEN=50
 export MIXGLM_INFERENCE_LAMBDAS=0,0.1,0.25,0.5,1,2,5,10,20
@@ -30,6 +30,8 @@ export MIXGLM_INFERENCE_TOL=1e-3
 export MIXGLM_INFERENCE_LEADERBOARD_STARTS=2
 export MIXGLM_INFERENCE_BOOTSTRAP_STARTS=1
 export MIXGLM_INFERENCE_REFIT_STARTS=2
+export MIXGLM_INFERENCE_FINAL_REFIT_STARTS=5
+export MIXGLM_INFERENCE_FINAL_REFIT_BATCHES=3
 export MIXGLM_INFERENCE_ACTIVE_THRESHOLD=1e-5
 export MIXGLM_INFERENCE_MIN_ACTIVE_PER_COMPONENT=1
 export MIXGLM_INFERENCE_BOOTSTRAP_REPS=500
@@ -48,5 +50,6 @@ echo "Dataset: $MIXGLM_INFERENCE_DATASET"
 echo "Lambda grid: $MIXGLM_INFERENCE_LAMBDAS"
 echo "Bootstrap: $MIXGLM_INFERENCE_BOOTSTRAP_REPS participant-cluster replicates"
 echo "Family rule: best full-data nonidentical model with slopes in every component"
+echo "Preprocessing: redundant DDP and DDA voice transforms removed"
 
 python -u experiments/real_data/run_final_inference.py

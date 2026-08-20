@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mixglm_park_grouped
+#SBATCH --job-name=mixglm_park_grouped_reduced
 #SBATCH --partition=epyc-256
 #SBATCH --output=logs/park_grouped_%j.out
 #SBATCH --error=logs/park_grouped_%j.err
@@ -20,7 +20,7 @@ export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
-export MIXGLM_REAL_OUTPUT_ROOT=experiments/real_data/targeted_outputs/v4_parkinsons_grouped
+export MIXGLM_REAL_OUTPUT_ROOT=experiments/real_data/targeted_outputs/v5_parkinsons_grouped_reduced_20260820
 export MIXGLM_REAL_DATASETS=parkinsons_log
 export MIXGLM_REAL_INITS=kmeans_glm,quantile_glm
 export MIXGLM_REAL_LAMBDAS=0,0.1,0.25,0.5,1,2,5,10,20
@@ -50,5 +50,6 @@ echo "Output: $MIXGLM_REAL_OUTPUT_ROOT"
 echo "Dataset: $MIXGLM_REAL_DATASETS"
 echo "Validation: five participant-grouped splits plus full family leaderboard"
 echo "Selection: active-set refit BIC; at least one slope per component"
+echo "Preprocessing: redundant DDP and DDA voice transforms removed"
 
 python -u experiments/real_data/run_targeted_hpc_screen.py
