@@ -1,0 +1,12 @@
+dataset,selected_lambda,count,frequency
+parkinsons,0,54,0.108
+parkinsons,0.1,25,0.05
+parkinsons,0.25,30,0.06
+parkinsons,0.5,30,0.06
+parkinsons,1,31,0.062
+parkinsons,2,36,0.072
+parkinsons,5,50,0.1
+parkinsons,10,89,0.178
+parkinsons,20,155,0.31
+rand,10,3,0.006
+rand,20,497,0.994

@@ -1,0 +1,1228 @@
+\documentclass[a4paper,fleqn]{cas-sc}
+
+\usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{booktabs,array,multirow}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{url}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{assumption}{Assumption}[section]
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\KL}{KL}
+\DeclareMathOperator{\diag}{diag}
+\newcommand{\E}{\mathbb E}
+\newcommand{\ind}{\mathbf 1}
+\newcommand{\R}{\mathbb R}
+\newcommand{\T}{\mathsf T}
+\newcommand{\model}{\mathfrak m}
+\newcommand{\PEN}{\mathcal P}
+\setlength{\emergencystretch}{3em}
+
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\numberwithin{equation}{section}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+\shorttitle{Supplementary Material}
+\shortauthors{Pal et al.}
+\title[mode=title]{Supplementary Material for \textit{Finite mixtures of generalized regressions with component-specific response families}}
+
+\author[1]{Samyajoy Pal}
+\cormark[1]
+\ead{palsamyajoy@gmail.com}
+\author[2]{Dayasri Ravi}
+\author[1]{Rouven E. Haschka}
+\affiliation[1]{organization={Chair of Data Analytics, Technical University of Kaiserslautern-Landau},
+  city={Kaiserslautern},
+  country={Germany}}
+\affiliation[2]{organization={Department of Mathematics, University of Augsburg},
+  city={Augsburg},
+  country={Germany}}
+\cortext[1]{Corresponding author}
+
+\begin{abstract}
+This document contains complete proofs of the fixed-model results, derivations and numerical validation of the fourteen analytical Louis derivative blocks, full simulation specifications and additional summaries, matched application diagnostics, and a reproducibility manifest. It is self-contained and uses the notation of the accompanying article.
+\end{abstract}
+
+\begin{keywords}
+finite mixture regression \sep Louis information \sep asymptotic theory \sep simulation design \sep reproducibility
+\end{keywords}
+
+\maketitle
+
+\section{Complete proofs}
+\label{supp:proofs}
+
+This section proves the results stated in the main article. The proofs apply to a fixed family tuple and fixed coefficient support. They do not cover family search, component-number search, coincident components, vanishing weights, nested-family boundaries, or data-dependent support selection.
+
+\subsection{Model and assumptions}
+
+Let
+\[
+ p_\theta(y\mid x)=\sum_{k=1}^K\pi_k
+ f_{d_k}\{y;h_{d_k}(x^\T\beta_k),\gamma_k\}
+ =\sum_{k=1}^K\pi_kq_k(y\mid x;\beta_k,\gamma_k)
+\]
+for a fixed tuple $\model=(d_1,\ldots,d_K)$. All component laws are dominated by one sigma-finite measure $\nu$. A deterministic labeling convention is imposed locally. We use the following conditions, restated here so the supplement can be read independently.
+
+\begin{assumption}[Fixed-candidate conditions]
+\label{supp:ass-fixed}
+The observations are independent and identically distributed from $p_{\theta_0}(y\mid x)$. The labeled parameter space $\Theta_{\model}$ is compact; $\theta_0$ is interior; mixing weights are uniformly bounded below; nuisance parameters are separated from degeneracies and boundaries; and the $K$ true component atoms are distinct. On the common support, $p_\theta(y\mid x)>0$, the map $\theta\mapsto\log p_\theta(y\mid x)$ is continuous, and
+\[
+ \sup_{\theta\in\Theta_{\model}}
+ \left|n^{-1}\ell_n(\theta)-\E_{\theta_0}\log p_\theta(Y\mid X)\right|
+ \xrightarrow{p}0.
+\]
+Every primitive family is identifiable in $(\mu,\gamma)$, every inverse link is one-to-one, and $X^\T b=0$ almost surely implies $b=0$. Finally, the union of the proposed component regression classes is $K$-identifiable: two mixtures with at most $K$ positive, distinct atoms that agree for $P_X$-almost every $x$ and $\nu$-almost every $y$ have the same weighted density functions up to permutation. The classes are cross-family separable in the parameter interior: equality of two primitive regression densities implies equality of their family labels and parameters.
+\end{assumption}
+
+\begin{assumption}[Local regularity]
+\label{supp:ass-local}
+In a labeled neighborhood of $\theta_0$, the free parameter is an open subset of $\R^r$. The log density is twice continuously differentiable; its first two derivatives have integrable local envelopes; the score has finite second moment; differentiation and expectation may be interchanged; and the Fisher information $I(\theta_0)$ is positive definite. The consistent local maximum likelihood estimator satisfies the score equation with probability tending to one.
+\end{assumption}
+
+\subsection{Identifiability}
+
+The first lemma separates regression identifiability from finite-mixture identifiability. This makes clear that a full-rank design alone is insufficient for a mixture result.
+
+\begin{lemma}[Primitive regression identifiability]
+\label{supp:lem-component}
+Under Assumption~\ref{supp:ass-fixed}, equality
+\[
+ f_d\{y;h_d(x^\T\beta_1),\gamma_1\}
+ =f_d\{y;h_d(x^\T\beta_2),\gamma_2\}
+\]
+for $P_X$-almost every $x$ and $\nu$-almost every $y$ implies
+$(\beta_1,\gamma_1)=(\beta_2,\gamma_2)$.
+\end{lemma}
+
+\begin{proof}
+Primitive family identifiability gives, for $P_X$-almost every $x$,
+\[
+ h_d(x^\T\beta_1)=h_d(x^\T\beta_2),\qquad \gamma_1=\gamma_2.
+\]
+Injectivity of $h_d$ implies $x^\T(\beta_1-\beta_2)=0$ almost surely. The design condition then gives $\beta_1-\beta_2=0$, proving the claim.
+\end{proof}
+
+\begin{theorem}[Identifiability of the fixed family tuple]
+\label{supp:thm-ident}
+Under Assumption~\ref{supp:ass-fixed}, the fixed-tuple model restricted to representations with $K$ positive, distinct atoms is identifiable up to component-label permutation. A distribution represented by $K$ positive, distinct atoms has no equivalent representation with fewer than $K$ distinct atoms from the proposed classes.
+\end{theorem}
+
+\begin{proof}
+Consider first two representations with $K$ distinct atoms. By $K$-identifiability, there is a bijection $\sigma$ such that
+\[
+ \pi_k^{(1)}=\pi_{\sigma(k)}^{(2)},\qquad
+ q_k(\,\cdot\mid\cdot;\beta_k^{(1)},\gamma_k^{(1)})
+ =q_{\sigma(k)}(\,\cdot\mid\cdot;
+ \beta_{\sigma(k)}^{(2)},\gamma_{\sigma(k)}^{(2)})
+\]
+almost everywhere. Cross-family separability identifies the matched family labels, and Lemma~\ref{supp:lem-component} identifies their regression and nuisance parameters. The two parameter collections agree after $\sigma$; under the deterministic labeling convention they agree exactly.
+
+Now suppose the first representation contains $K$ positive, distinct atoms and the second contains $L<K$ distinct atoms. The two mixtures then contain at most $K$ distinct atoms, so $K$-identifiability would require equality of their weighted-atom collections. This is impossible because those collections have different cardinalities. Finally, any $K$-slot representation with duplicate atoms reduces, after their positive weights are combined, to such an $L<K$ representation. This proves the second claim and isolates the sole repeated-atom failure: two redundant representations of the same lower-order mixture can split a weight differently.
+\end{proof}
+
+
+\subsection{Existence and consistency}
+
+The consistency proof uses a uniform law of large numbers and a strict population separation. We give the gap argument explicitly.
+
+\begin{theorem}[Existence and consistency of maximum likelihood]
+\label{supp:thm-consistency}
+Under Assumption~\ref{supp:ass-fixed}, a finite sample maximizer exists whenever the criterion is finite, and any labeled maximum likelihood estimator satisfies $\widehat\theta_n\to\theta_0$ in probability.
+\end{theorem}
+
+\begin{proof}
+Continuity of $\ell_n$ on compact $\Theta_{\model}$ gives existence by the extreme-value theorem. Define
+\[
+ M(\theta)=\E_{\theta_0}\log p_\theta(Y\mid X).
+\]
+Conditioning on $X$ and applying Gibbs' inequality,
+\[
+ M(\theta_0)-M(\theta)
+ =\E_X\!\left[
+ \int p_{\theta_0}(y\mid X)
+ \log\frac{p_{\theta_0}(y\mid X)}{p_\theta(y\mid X)}
+ \,\nu(\mathrm dy)\right]\geq0.
+\]
+Equality holds only if $p_\theta(\cdot\mid X)=p_{\theta_0}(\cdot\mid X)$ for $P_X$-almost every $X$. Theorem~\ref{supp:thm-ident} and the labeling convention then imply $\theta=\theta_0$.
+
+Fix $\varepsilon>0$ and let
+\[
+ C_\varepsilon=\{\theta\in\Theta_{\model}:\|\theta-\theta_0\|\geq\varepsilon\}.
+\]
+This set is compact. Continuity of $M$ and uniqueness of its maximizer imply
+\[
+ \delta_\varepsilon
+ =M(\theta_0)-\sup_{\theta\in C_\varepsilon}M(\theta)>0.
+\]
+On the event
+\[
+ \sup_{\theta\in\Theta_{\model}}
+ |n^{-1}\ell_n(\theta)-M(\theta)|<\delta_\varepsilon/3,
+\]
+every $\theta\in C_\varepsilon$ satisfies
+\[
+ n^{-1}\ell_n(\theta)
+ \leq M(\theta_0)-2\delta_\varepsilon/3
+ <n^{-1}\ell_n(\theta_0).
+\]
+The uniform law of large numbers makes this event have probability tending to one. Hence no maximizer lies in $C_\varepsilon$ with probability tending to one, proving consistency.
+\end{proof}
+
+\subsection{Regular asymptotic normality}
+
+The local regularity conditions deliberately exclude all mixture singularities. Within that neighborhood the usual score expansion can be justified term by term.
+
+\begin{theorem}[Regular fixed-model limit]
+\label{supp:thm-normal}
+Under Assumptions~\ref{supp:ass-fixed} and \ref{supp:ass-local},
+\[
+ \sqrt n(\widehat\theta_n-\theta_0)
+ \rightsquigarrow N\{0,I(\theta_0)^{-1}\}.
+\]
+\end{theorem}
+
+\begin{proof}
+Write $S_i(\theta)=\nabla_\theta\log p_\theta(Y_i\mid X_i)$. Differentiation under the integral gives $\E_{\theta_0}S_i(\theta_0)=0$ and the information identity
+\[
+ -\E_{\theta_0}\nabla_\theta^2\log p_{\theta_0}(Y\mid X)
+ =\E_{\theta_0}\{S_i(\theta_0)S_i(\theta_0)^\T\}
+ =I(\theta_0).
+\]
+The multivariate central limit theorem yields
+\[
+ n^{-1/2}\nabla\ell_n(\theta_0)
+ =n^{-1/2}\sum_{i=1}^nS_i(\theta_0)
+ \rightsquigarrow N\{0,I(\theta_0)\}.
+\]
+For an interior local maximizer, $\nabla\ell_n(\widehat\theta_n)=0$ with probability tending to one. The fundamental theorem of calculus along the line segment from $\theta_0$ to $\widehat\theta_n$ gives
+\[
+ 0=n^{-1/2}\nabla\ell_n(\theta_0)
+ +\overline H_n
+ \sqrt n(\widehat\theta_n-\theta_0),
+\]
+where
+\[
+ \overline H_n=
+ \int_0^1 n^{-1}\nabla^2\ell_n
+ \{\theta_0+t(\widehat\theta_n-\theta_0)\}\,\mathrm dt.
+\]
+Consistency keeps the entire segment in the local neighborhood with probability tending to one. The derivative envelope and a local uniform law of large numbers then give $-\overline H_n\xrightarrow{p}I(\theta_0)$. Positive definiteness makes $\overline H_n$ invertible with probability tending to one. Solving the expansion and applying Slutsky's theorem proves the result.
+\end{proof}
+
+\subsection{Louis information and the regression chain rule}
+
+The next proof differentiates a finite log-sum-exp directly. It therefore needs no informal missing-data argument and fixes the sign of the missing-information term.
+
+\begin{theorem}[Louis identity]
+\label{supp:thm-louis}
+Let $c_{ik}(\theta)=\log\pi_k+\log q_k(Y_i\mid X_i)$,
+$s_{ik}=\nabla c_{ik}$, $H_{ik}=\nabla^2c_{ik}$, and
+$\tau_{ik}=\exp(c_{ik})/\sum_\ell\exp(c_{i\ell})$. Then
+\[
+ I_i(\theta)=-\sum_k\tau_{ik}H_{ik}
+ -\sum_k\tau_{ik}(s_{ik}-\bar s_i)(s_{ik}-\bar s_i)^\T,
+ \qquad \bar s_i=\sum_k\tau_{ik}s_{ik}.
+\]
+\end{theorem}
+
+\begin{proof}
+For $\ell_i(\theta)=\log\sum_k\exp\{c_{ik}(\theta)\}$,
+\[
+ \nabla\ell_i=\sum_k\tau_{ik}s_{ik}.
+\]
+The quotient rule gives
+\[
+ \nabla\tau_{ik}=\tau_{ik}(s_{ik}-\bar s_i).
+\]
+Differentiating the score,
+\[
+ \nabla^2\ell_i
+ =\sum_k\tau_{ik}H_{ik}
+ +\sum_k\tau_{ik}(s_{ik}-\bar s_i)s_{ik}^\T.
+\]
+Because $\sum_k\tau_{ik}(s_{ik}-\bar s_i)=0$, subtracting
+$\bar s_i^\T$ inside the final factor does not change the sum:
+\[
+ \sum_k\tau_{ik}(s_{ik}-\bar s_i)s_{ik}^\T
+ =\sum_k\tau_{ik}(s_{ik}-\bar s_i)(s_{ik}-\bar s_i)^\T.
+\]
+Negating the observed Hessian proves the per-observation formula. Summing over $i$ gives the sample identity, and recognizing the two conditional moments of the complete-data score gives Louis' conditional-expectation form \citep{louis1982information}.
+\end{proof}
+
+\begin{proposition}[Link transformation]
+\label{supp:prop-chain}
+For $\eta=x^\T\beta$, $\mu=h(\eta)$, and $\ell=\log f(y;\mu,\gamma)$,
+\[
+ s_\beta=x\,a_\mu\dot h,\quad s_\gamma=a_\gamma,\quad
+ H_{\beta\beta}=xx^\T(b_{\mu\mu}\dot h^2+a_\mu\ddot h),
+\]
+\[
+ H_{\beta\gamma}=x(\dot h\,b_{\mu\gamma})^\T,\qquad
+ H_{\gamma\gamma}=B_{\gamma\gamma}.
+\]
+\end{proposition}
+
+\begin{proof}
+The scalar derivative with respect to $\eta$ is
+$\partial_\eta\ell=a_\mu\dot h$. Because
+$\nabla_\beta\eta=x$, the first identity follows. A second differentiation gives
+\[
+ \partial_{\eta\eta}^2\ell=b_{\mu\mu}\dot h^2+a_\mu\ddot h,
+\]
+and multiplication by $xx^\T$ gives $H_{\beta\beta}$. Differentiating
+$a_\mu\dot h$ with respect to $\gamma$ gives
+$\dot h\,b_{\mu\gamma}$ because $h$ does not depend on $\gamma$. The remaining identities are immediate.
+\end{proof}
+
+\subsection{Lasso local limit}
+
+The objective in the article uses a sum log-likelihood. Consequently, an $O(\sqrt n)$ lasso tuning parameter contributes to the local $n^{-1/2}$ limit.
+
+\begin{proposition}[Penalized local asymptotics]
+\label{supp:prop-lasso}
+Let $\widehat\theta_{n,\lambda}$ be a consistent local maximizer, let $\PEN$ be the penalized coordinates, and suppose $\lambda_{n,j}/\sqrt n\to\lambda_j$. Then $\sqrt n(\widehat\theta_{n,\lambda}-\theta_0)$ converges to the unique maximizer of
+\[
+ V(u)=u^\T Z-\frac12u^\T I(\theta_0)u
+ -\sum_{j\in\PEN}\lambda_j
+ \left[u_j\operatorname{sign}(\theta_{0j})\ind\{\theta_{0j}\neq0\}
+ +|u_j|\ind\{\theta_{0j}=0\}\right],
+\]
+where $Z\sim N\{0,I(\theta_0)\}$.
+\end{proposition}
+
+\begin{proof}
+Write $\delta_n=\widehat\theta_{n,\lambda}-\theta_0$ and let $z_n$ be a lasso subgradient, with zero entries on unpenalized coordinates and $|z_{n,j}|\leq1$ elsewhere. The first-order condition and an integral score expansion give
+\[
+ 0=\nabla\ell_n(\theta_0)+
+ \left[\int_0^1\nabla^2\ell_n(\theta_0+t\delta_n)\,\mathrm dt\right]\delta_n
+ -\Lambda_n z_n,
+\]
+where $\Lambda_n$ is diagonal on the penalized coordinates. Consistency, the local Hessian law of large numbers, and positive definiteness imply that the smallest eigenvalue of the negative bracketed matrix is at least $cn$ with probability tending to one for some $c>0$. Because $\|\nabla\ell_n(\theta_0)\|=O_p(\sqrt n)$, $\|\Lambda_nz_n\|=O(\sqrt n)$, and the parameter dimension is fixed, this equation yields $\|\delta_n\|=O_p(n^{-1/2})$.
+
+For bounded $u$, local asymptotic quadratic expansion gives, uniformly on compact sets,
+\[
+ \ell_n(\theta_0+u/\sqrt n)-\ell_n(\theta_0)
+ =u^\T Z_n-\frac12u^\T I(\theta_0)u+o_p(1),
+ \quad Z_n=n^{-1/2}\nabla\ell_n(\theta_0)\rightsquigarrow Z.
+\]
+If $\theta_{0j}\neq0$, differentiability of the absolute value at $\theta_{0j}$ gives
+\[
+ \lambda_{n,j}\{|\,\theta_{0j}+u_j/\sqrt n\,|-|\theta_{0j}|\}
+ =\frac{\lambda_{n,j}}{\sqrt n}
+ u_j\operatorname{sign}(\theta_{0j})+o(1).
+\]
+If $\theta_{0j}=0$, the same difference is exactly
+$\lambda_{n,j}|u_j|/\sqrt n$. Thus the local penalized criterion converges weakly, uniformly on compact sets, to $V$.
+
+Positive definiteness of $I(\theta_0)$ makes $V$ strictly concave and coercive, so its maximizer is almost surely unique. The same local Hessian bound makes the localized sample criterion strictly concave with probability tending to one; subtracting the convex lasso penalty preserves strict concavity. Root-$n$ tightness and the argmax continuous-mapping theorem therefore give the stated convergence. When all $\lambda_j=0$, the maximizer is $I(\theta_0)^{-1}Z$; a positive $\lambda_j$ at a true zero creates the absolute-value kink and generally a non-Gaussian law.
+\end{proof}
+
+\subsection{Generalized expectation-maximization monotonicity and stationary accumulation points}
+
+The ascent result applies to exact expectation-maximization (EM) and to generalized expectation-maximization (GEM) with an inexact block update whenever the auxiliary function does not decrease.
+
+\begin{theorem}[Penalized GEM ascent]
+\label{supp:thm-gem}
+If $Q_{P,n}(\theta^{(t+1)}\mid\theta^{(t)})
+\geq Q_{P,n}(\theta^{(t)}\mid\theta^{(t)})$, then
+$F_n(\theta^{(t+1)})\geq F_n(\theta^{(t)})$.
+\end{theorem}
+
+\begin{proof}
+Let $r_t(z)=p_{\theta^{(t)}}(z\mid Y,X)$. For any $\theta$,
+\[
+ \ell_n(\theta)
+ =Q_n(\theta\mid\theta^{(t)})
+ -\E_{r_t}\log p_\theta(Z\mid Y,X).
+\]
+Subtracting the same identity at $\theta^{(t)}$ and then subtracting the parameter-only penalty gives
+\[
+ F_n(\theta)-F_n(\theta^{(t)})
+ =Q_{P,n}(\theta\mid\theta^{(t)})
+ -Q_{P,n}(\theta^{(t)}\mid\theta^{(t)})
+ +\KL\{r_t,p_\theta(\cdot\mid Y,X)\}.
+\]
+The Kullback--Leibler term is nonnegative. Setting $\theta=\theta^{(t+1)}$ proves the result.
+\end{proof}
+
+\begin{proposition}[Stationary accumulation points]
+\label{supp:prop-stationary}
+Suppose the parameter space is compact, $F_n$ is continuous, the update map is closed, and every nonstationary point has a neighborhood on which one full update increases $F_n$ by at least a positive constant. Then every accumulation point of the GEM sequence is stationary.
+\end{proposition}
+
+\begin{proof}
+Theorem~\ref{supp:thm-gem} makes $F_n(\theta^{(t)})$ nondecreasing. Compactness and continuity bound it above, so it converges to a finite value $F^\star$. Let a subsequence $\theta^{(t_j)}$ converge to $\theta^\star$. If $\theta^\star$ were nonstationary, the uniform strict-ascent assumption would provide a neighborhood $N$ and $\delta>0$ such that every full update from $N$ increases $F_n$ by at least $\delta$. For all sufficiently large $j$, $\theta^{(t_j)}\in N$, hence
+\[
+ F_n(\theta^{(t_j+1)})\geq F_n(\theta^{(t_j)})+\delta.
+\]
+Both sides must converge to $F^\star$ along further compact subsequences, a contradiction. Thus $\theta^\star$ is stationary. This is an ascent-map specialization of standard EM convergence arguments \citep{wu1983convergence}.
+\end{proof}
+
+\subsection{Regular Bayesian information criterion comparison}
+
+The final proof documents exactly why the familiar Bayesian information criterion (BIC) argument does not cover singular overfitting.
+
+\begin{proposition}[BIC consistency in a finite regular collection]
+\label{supp:prop-bic}
+For finitely many regular fixed candidates, suppose the truth is included, every incorrect nonnested candidate has a positive Kullback--Leibler gap, and every larger candidate containing the truth has an $O_p(1)$ likelihood gain. Then BIC selects the smallest true candidate with probability tending to one.
+\end{proposition}
+
+\begin{proof}
+Let $m_0$ be the smallest true candidate. For an incorrect candidate $m$, uniform likelihood convergence gives
+\[
+ \ell_n(\widehat\theta_{m_0})-\ell_n(\widehat\theta_m)
+ =n\Delta_m+o_p(n)
+\]
+for some $\Delta_m>0$. Therefore
+\[
+ \operatorname{BIC}(m)-\operatorname{BIC}(m_0)
+ =2n\Delta_m+o_p(n)+(a_m-a_{m_0})\log n>0
+\]
+with probability tending to one. For a regular candidate $m$ that contains the truth,
+\[
+ 2\{\ell_n(\widehat\theta_m)-\ell_n(\widehat\theta_{m_0})\}=O_p(1),
+\]
+whereas $(a_m-a_{m_0})\log n\to\infty$ whenever $a_m>a_{m_0}$. Hence every larger regular true candidate also has larger BIC with probability tending to one. Finiteness of the collection permits a union bound over candidates. Vanishing weights and coincident components invalidate the assumed $O_p(1)$ regular likelihood expansion, so the proof does not apply to overfitted mixture orders or nested-family boundaries \citep{keribin2000order,drton2017sbic}.
+\end{proof}
+
+\section{Analytical Louis derivations and validation}
+\label{supp:derivatives}
+
+The main article lists the final derivative blocks. This section supplies the underlying one-observation log densities and the differentiation steps that are most easily obscured by transformed nuisance coordinates. The derivations cover Gaussian, Student-$t$, Poisson, negative binomial with quadratic variance (NB2), Gamma, exponential, lognormal, inverse Gaussian, Bernoulli, geometric, beta, zero-inflated Poisson (ZIP), zero-inflated negative binomial (ZINB), and skew-normal components.
+
+\subsection{Generic transformations}
+
+For $\ell(\mu,\gamma)=\log f(y;\mu,\gamma)$, write
+\[
+ a_\mu=\partial_\mu\ell,\quad b_{\mu\mu}=\partial_{\mu\mu}^2\ell,\quad
+ a_\gamma=\nabla_\gamma\ell,\quad
+ B_{\gamma\gamma}=\nabla_{\gamma\gamma}^2\ell,\quad
+ b_{\mu\gamma}=\nabla_\gamma(\partial_\mu\ell).
+\]
+If a positive natural nuisance parameter is $u=\exp(a)$, repeated application of the chain rule gives
+\begin{equation}
+ \partial_a\ell=u\partial_u\ell,\qquad
+ \partial_{aa}^2\ell=u\partial_u\ell+u^2\partial_{uu}^2\ell,\qquad
+ \partial_{\mu a}^2\ell=u\partial_{\mu u}^2\ell.
+ \label{supp:eq:log-transform}
+\end{equation}
+If $\vartheta=\{1+\exp(-\zeta)\}^{-1}$, then
+\begin{equation}
+ \partial_\zeta\vartheta=\vartheta(1-\vartheta),\qquad
+ \partial_{\zeta\zeta}^2\vartheta
+ =\vartheta(1-\vartheta)(1-2\vartheta).
+ \label{supp:eq:logit-transform}
+\end{equation}
+For an inverse link $\mu=h(\eta)$, the identity, log, and logit cases have
+\[
+\begin{array}{c|ccc}
+ &h(\eta)&\dot h(\eta)&\ddot h(\eta)\\ \hline
+\text{identity}&\eta&1&0\\
+\text{log}&e^\eta&\mu&\mu\\
+\text{logit}&(1+e^{-\eta})^{-1}&\mu(1-\mu)&\mu(1-\mu)(1-2\mu).
+\end{array}
+\]
+Substitution in Proposition~\ref{supp:prop-chain} maps every block below into regression coordinates.
+
+\subsection{Continuous and positive families}
+
+These families illustrate two recurring patterns: location-scale differentiation and log transformation of a positive shape or scale parameter.
+
+\paragraph{Gaussian.}
+With $v=e^s$, $r=y-\mu$, and constants in $y$ suppressed,
+\[
+ \ell=-\frac12s-\frac{r^2}{2v}.
+\]
+Since $\partial_\mu r=-1$ and $\partial_s(v^{-1})=-v^{-1}$,
+\[
+ a_\mu=r/v,\quad b_{\mu\mu}=-1/v,\quad
+ a_s=-1/2+r^2/(2v),
+\]
+\[
+ B_{ss}=-r^2/(2v),\qquad b_{\mu s}=-r/v.
+\]
+
+\paragraph{Student-$t$.}
+For $\sigma=e^a$, $\nu=2+e^b$, $u=(y-\mu)^2/\sigma^2$, and
+$q=1+u/\nu$,
+\[
+ \ell=\log\Gamma\!\left(\frac{\nu+1}{2}\right)
+ -\log\Gamma\!\left(\frac{\nu}{2}\right)
+ -\frac12\log(\nu\pi)-a-\frac{\nu+1}{2}\log q.
+\]
+Writing $r=y-\mu$ and $D=\nu\sigma^2+r^2$, direct differentiation in $\mu$ and $a$ gives
+\[
+ a_\mu=\frac{(\nu+1)r}{D},\qquad
+ b_{\mu\mu}=\frac{(\nu+1)(r^2-\nu\sigma^2)}{D^2},
+\]
+\[
+ a_a=-1+\frac{(\nu+1)r^2}{D},\quad
+ B_{aa}=-\frac{2(\nu+1)r^2\nu\sigma^2}{D^2},\quad
+ b_{\mu a}=-\frac{2(\nu+1)r\nu\sigma^2}{D^2}.
+\]
+Differentiating first in the natural coordinate $\nu$ yields
+\[
+ L_\nu=\frac12\psi\!\left(\frac{\nu+1}{2}\right)
+ -\frac12\psi\!\left(\frac{\nu}{2}\right)-\frac{1}{2\nu}
+ -\frac12\log q+\frac{(\nu+1)u}{2\nu(\nu+u)}.
+\]
+If $M=\nu(\nu+u)$ and $N=u(\nu+1)/2$, the quotient rule gives
+\[
+ L_{\nu\nu}=\frac14\psi_1\!\left(\frac{\nu+1}{2}\right)
+ -\frac14\psi_1\!\left(\frac{\nu}{2}\right)+\frac{1}{2\nu^2}
+ +\frac{u}{2M}+\frac{uM/2-N(2\nu+u)}{M^2}.
+\]
+Applying \eqref{supp:eq:log-transform} with $w=e^b=\nu-2$ gives
+\[
+ a_b=wL_\nu,\qquad B_{bb}=wL_\nu+w^2L_{\nu\nu}.
+\]
+Differentiating the location and scale scores with respect to $\nu$ and multiplying by $w$ gives
+\[
+ b_{\mu b}=\frac{wr(r^2-\sigma^2)}{D^2},\qquad
+ B_{ab}=\frac{wr^2(r^2-\sigma^2)}{D^2}.
+\]
+
+\paragraph{Gamma and exponential.}
+For a mean-shape Gamma law with $\kappa=e^a$,
+\[
+ \ell=(\kappa-1)\log y-\kappa y/\mu-\log\Gamma(\kappa)
+ -\kappa\log\mu+\kappa\log\kappa.
+\]
+Thus
+\[
+ a_\mu=\kappa(y-\mu)/\mu^2,\qquad
+ b_{\mu\mu}=\kappa(\mu-2y)/\mu^3.
+\]
+The natural shape score and curvature are
+\[
+ L_\kappa=\log y-y/\mu-\psi(\kappa)-\log\mu+\log\kappa+1,\qquad
+ L_{\kappa\kappa}=-\psi_1(\kappa)+1/\kappa.
+\]
+Equation~\eqref{supp:eq:log-transform} gives
+\[
+ a_a=\kappa L_\kappa,\quad
+ B_{aa}=\kappa L_\kappa+\kappa^2L_{\kappa\kappa},\quad
+ b_{\mu a}=a_\mu.
+\]
+Setting $\kappa=1$ and dropping the shape coordinate gives the exponential log density
+$\ell=-\log\mu-y/\mu$ and
+\[
+ a_\mu=(y-\mu)/\mu^2,\qquad b_{\mu\mu}=(\mu-2y)/\mu^3.
+\]
+
+\paragraph{Lognormal.}
+With log-location $\mu$, $\sigma=e^a$, and $r=\log y-\mu$,
+\[
+ \ell=-\log y-a-\frac{r^2}{2\sigma^2}+\text{constant}.
+\]
+This is the Gaussian calculation applied to $\log y$, with a log-standard-deviation rather than log-variance coordinate:
+\[
+ a_\mu=r/\sigma^2,\quad b_{\mu\mu}=-1/\sigma^2,\quad
+ a_a=-1+r^2/\sigma^2,
+\]
+\[
+ B_{aa}=-2r^2/\sigma^2,\qquad b_{\mu a}=-2r/\sigma^2.
+\]
+
+\paragraph{Inverse Gaussian.}
+For mean $\mu$ and shape $\lambda=e^a$,
+\[
+ \ell=\frac12\{\log\lambda-\log(2\pi)-3\log y\}
+ -\lambda\frac{(y-\mu)^2}{2\mu^2y}.
+\]
+Let $A=(y-\mu)^2/(2\mu^2y)$. Differentiation gives
+\[
+ a_\mu=\lambda(y-\mu)/\mu^3,\qquad
+ b_{\mu\mu}=\lambda(2\mu-3y)/\mu^4.
+\]
+Because $\partial_\lambda\ell=1/(2\lambda)-A$, the log-shape transformation gives
+\[
+ a_a=1/2-\lambda A,\qquad B_{aa}=-\lambda A,\qquad b_{\mu a}=a_\mu.
+\]
+
+\paragraph{Skew normal.}
+For location $\mu$, scale $\omega=e^a$, shape $\alpha$, and
+$z=(y-\mu)/\omega$,
+\[
+ \ell=\log2-a+\log\varphi(z)+\log\Phi(\alpha z).
+\]
+Define $M(t)=\varphi(t)/\Phi(t)$, $t=\alpha z$, and
+$M'(t)=-M(t)\{t+M(t)\}$. Then
+\[
+ \ell_z=-z+\alpha M(t),\quad
+ \ell_{zz}=-1+\alpha^2M'(t),\quad
+ \ell_{z\alpha}=M(t)+\alpha zM'(t).
+\]
+Using $\partial_\mu z=-1/\omega$ and $\partial_a z=-z$ yields
+\[
+ a_\mu=-\ell_z/\omega,\quad b_{\mu\mu}=\ell_{zz}/\omega^2,\quad
+ a_a=-1-z\ell_z,\quad a_\alpha=zM(t),
+\]
+\[
+ B_{aa}=z\ell_z+z^2\ell_{zz},\quad
+ B_{\alpha\alpha}=z^2M'(t),\quad B_{a\alpha}=-z\ell_{z\alpha},
+\]
+\[
+ b_{\mu a}=(\ell_z+z\ell_{zz})/\omega,\qquad
+ b_{\mu\alpha}=-\ell_{z\alpha}/\omega.
+\]
+
+\subsection{Binary, bounded, and count families}
+
+For mean-parameterized exponential-family components, differentiation in $\mu$ is short; NB2 and beta require transformed dispersion or precision coordinates.
+
+\paragraph{Bernoulli, Poisson, and geometric.}
+Their log densities, up to terms free of $\mu$, are
+\[
+ \ell_{\mathrm{Ber}}=y\log\mu+(1-y)\log(1-\mu),\quad
+ \ell_{\mathrm{Poi}}=y\log\mu-\mu,
+\]
+\[
+ \ell_{\mathrm{Geo}}=y\log\mu-(y+1)\log(1+\mu).
+\]
+Two differentiations give
+\[
+ a_\mu^{\mathrm{Ber}}=\frac y\mu-\frac{1-y}{1-\mu},\qquad
+ b_{\mu\mu}^{\mathrm{Ber}}=-\frac y{\mu^2}-\frac{1-y}{(1-\mu)^2},
+\]
+\[
+ a_\mu^{\mathrm{Poi}}=y/\mu-1,\qquad
+ b_{\mu\mu}^{\mathrm{Poi}}=-y/\mu^2,
+\]
+\[
+ a_\mu^{\mathrm{Geo}}=y/\mu-(y+1)/(1+\mu),\qquad
+ b_{\mu\mu}^{\mathrm{Geo}}=-y/\mu^2+(y+1)/(1+\mu)^2.
+\]
+
+\paragraph{NB2.}
+Let $\rho=\log\alpha$, $r=\alpha^{-1}=e^{-\rho}$, and $A=r+\mu$. The log mass is
+\[
+ \ell=\log\Gamma(y+r)-\log\Gamma(r)-\log\Gamma(y+1)
+ +r\log r+y\log\mu-(r+y)\log A.
+\]
+Holding $r$ fixed gives
+\[
+ a_\mu=y/\mu-(r+y)/A,\qquad
+ b_{\mu\mu}=-y/\mu^2+(r+y)/A^2.
+\]
+The score and curvature in $r$ are
+\[
+ L_r=\psi(y+r)-\psi(r)+\log r+1-\log A-(r+y)/A,
+\]
+\[
+ L_{rr}=\psi_1(y+r)-\psi_1(r)+1/r-1/A-(\mu-y)/A^2.
+\]
+Since $\partial_\rho r=-r$, the chain rule gives
+\[
+ a_\rho=-rL_r,\qquad B_{\rho\rho}=rL_r+r^2L_{rr},\qquad
+ b_{\mu\rho}=r(\mu-y)/A^2.
+\]
+
+\paragraph{Beta.}
+Let $\phi=e^a$, $A=\mu\phi$, and $B=(1-\mu)\phi$. The log density is
+\[
+ \ell=\log\Gamma(\phi)-\log\Gamma(A)-\log\Gamma(B)
+ +(A-1)\log y+(B-1)\log(1-y).
+\]
+Differentiating in $\mu$ gives
+\[
+ G=-\psi(A)+\psi(B)+\log y-\log(1-y),\qquad a_\mu=\phi G,
+\]
+\[
+ b_{\mu\mu}=-\phi^2\{\psi_1(A)+\psi_1(B)\}.
+\]
+The natural precision score and curvature are
+\[
+ L_\phi=\psi(\phi)-\mu\psi(A)-(1-\mu)\psi(B)
+ +\mu\log y+(1-\mu)\log(1-y),
+\]
+\[
+ L_{\phi\phi}=\psi_1(\phi)-\mu^2\psi_1(A)
+ -(1-\mu)^2\psi_1(B).
+\]
+Equation~\eqref{supp:eq:log-transform} and differentiation of $\phi G$ give
+\[
+ a_a=\phi L_\phi,\qquad
+ B_{aa}=\phi L_\phi+\phi^2L_{\phi\phi},
+\]
+\[
+ b_{\mu a}=\phi G+\phi^2\{-\mu\psi_1(A)+(1-\mu)\psi_1(B)\}.
+\]
+
+\subsection{Zero-inflated count families}
+
+The zero and positive branches must be differentiated separately. This is also why the validation suite checks both branches.
+
+\paragraph{ZIP.}
+Let $\zeta=\operatorname{logit}(\vartheta)$ and
+$\dot\vartheta=\vartheta(1-\vartheta)$. If $y>0$,
+\[
+ \ell=\log(1-\vartheta)+y\log\mu-\mu-\log(y!),
+\]
+so the Poisson block is unchanged and
+\[
+ a_\zeta=-\vartheta,\qquad
+ B_{\zeta\zeta}=-\dot\vartheta,\qquad b_{\mu\zeta}=0.
+\]
+If $y=0$, define
+\[
+ e=e^{-\mu},\quad A=\vartheta+(1-\vartheta)e,\quad
+ B=(1-\vartheta)e,\quad C=\dot\vartheta(1-e).
+\]
+Because $A_\mu=-B$, $A_\zeta=C$, and
+$C_\zeta=\dot\vartheta(1-2\vartheta)(1-e)$,
+differentiating $\ell=\log A$ gives
+\[
+ a_\mu=-B/A,\qquad b_{\mu\mu}=B\vartheta/A^2,
+\]
+\[
+ a_\zeta=C/A,\qquad
+ B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,
+\]
+\[
+ b_{\mu\zeta}=(\dot\vartheta eA+CB)/A^2.
+\]
+
+\paragraph{ZINB.}
+For $y>0$, the log mass is $\log(1-\vartheta)$ plus the NB2 log mass, so the NB2 block and the positive-branch inflation entries from ZIP apply. For $y=0$, let
+\[
+ p_0=\{r/(r+\mu)\}^r,\qquad A=\vartheta+(1-\vartheta)p_0.
+\]
+For $j,\ell\in\{\mu,\rho\}$, let
+$g_j=\partial_j\log p_0$ and
+$H_{j\ell}=\partial_{j\ell}^2\log p_0$. With $D=r+\mu$ and
+$L_{r0}=\log r+1-\log D-r/D$,
+\[
+ g_\mu=-r/D,\quad H_{\mu\mu}=r/D^2,\quad
+ g_\rho=-rL_{r0},\quad H_{\mu\rho}=r\mu/D^2,
+\]
+\[
+ H_{\rho\rho}=rL_{r0}+r^2\{1/r-1/D-\mu/D^2\}.
+\]
+Now
+\[
+ A_j=(1-\vartheta)p_0g_j,\quad
+ A_{j\ell}=(1-\vartheta)p_0(H_{j\ell}+g_jg_\ell),\quad
+ A_{j\zeta}=-\dot\vartheta p_0g_j.
+\]
+Writing $C=\dot\vartheta(1-p_0)$ and
+$C_\zeta=\dot\vartheta(1-2\vartheta)(1-p_0)$, two applications of the quotient rule to $\log A$ give
+\[
+ a_j=A_j/A,\quad B_{j\ell}=(A_{j\ell}A-A_jA_\ell)/A^2,
+\]
+\[
+ a_\zeta=C/A,\quad B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,\quad
+ B_{j\zeta}=(A_{j\zeta}A-A_jC)/A^2.
+\]
+These expressions include the $\mu$--$\rho$--$\zeta$ cross-blocks needed by Louis information; omitting them is not an analytical ZINB Hessian.
+
+\subsection{Numerical implementation validation}
+
+Symbolic derivation establishes the formulas, while numerical comparison guards against transcription and coding errors. The validation script compares each implemented score and Hessian in $(\eta,\gamma)$ coordinates with central finite differences at a fixed interior test point. ZIP and ZINB are each checked at zero and at a positive count. Table~\ref{supp:tab:derivative-validation} reports the maximum absolute and relative discrepancies over all entries.
+
+\begin{table}[t]
+\centering
+\caption{Analytical derivative validation. Every comparison has status OK under the fixed validation tolerances.}
+\label{supp:tab:derivative-validation}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Family and branch & Number checked & Maximum absolute error & Relative error\\
+\midrule
+Gaussian & 5 & $2.57\times10^{-6}$ & $2.57\times10^{-6}$\\
+Student-$t$ & 10 & $1.07\times10^{-6}$ & $1.07\times10^{-6}$\\
+Poisson & 2 & $4.19\times10^{-6}$ & $2.77\times10^{-6}$\\
+NB2 & 5 & $7.78\times10^{-6}$ & $7.03\times10^{-6}$\\
+Gamma & 5 & $4.92\times10^{-6}$ & $1.43\times10^{-6}$\\
+Exponential & 2 & $6.21\times10^{-8}$ & $5.42\times10^{-8}$\\
+Lognormal & 5 & $1.15\times10^{-6}$ & $5.61\times10^{-7}$\\
+Inverse Gaussian & 5 & $8.02\times10^{-7}$ & $3.78\times10^{-7}$\\
+Bernoulli & 2 & $5.86\times10^{-7}$ & $5.86\times10^{-7}$\\
+Geometric & 2 & $6.47\times10^{-7}$ & $6.47\times10^{-7}$\\
+Beta & 5 & $1.09\times10^{-5}$ & $7.58\times10^{-6}$\\
+ZIP, zero & 5 & $3.80\times10^{-6}$ & $3.80\times10^{-6}$\\
+ZIP, positive & 5 & $5.78\times10^{-6}$ & $3.50\times10^{-6}$\\
+ZINB, zero & 10 & $4.05\times10^{-6}$ & $4.05\times10^{-6}$\\
+ZINB, positive & 10 & $5.86\times10^{-6}$ & $5.29\times10^{-6}$\\
+Skew normal & 10 & $1.39\times10^{-6}$ & $9.99\times10^{-7}$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The largest absolute discrepancy is $1.09\times10^{-5}$ for beta. The check is not a proof and its tolerance depends on the finite-difference step, but the all-family agreement provides an implementation test independent of the analytical code path.
+
+\section{Simulation design and additional results}
+\label{supp:simulation}
+
+This section fixes the complete data-generating mechanisms, candidate spaces, tuning rules, and Monte Carlo denominators underlying the simulation results. The structural and sparsity runs contain 100 replications per configuration. The intensive Gamma--lognormal inference run contains 500 replications per sample size.
+
+\subsection{Covariates and data-generating mixtures}
+
+Every design matrix contains an intercept. The remaining covariates follow a centered multivariate Gaussian distribution with autoregressive covariance
+\[
+ \Sigma_{ab}=0.2^{|a-b|}.
+\]
+Scenario A and C use $p=5$, hence four non-intercept covariates. Scenario B uses $p=20$, hence 19 non-intercept covariates. For each observation, $Z_i$ is drawn from the specified mixing weights, $\eta_{ik}=x_i^\T\beta_k$, and $Y_i$ is drawn from the component distribution in Table~\ref{supp:tab:dgm}. An independent sample of size 2000 is generated for prediction in Scenarios A and B.
+
+\begin{table}[t]
+\centering
+\caption{Data-generating models for family selection and fixed-model inference. Coefficient vectors include the intercept.}
+\label{supp:tab:dgm}
+\small
+\begin{tabular}{clp{0.29\linewidth}p{0.29\linewidth}}
+\toprule
+Example & Weights & Component 1 & Component 2\\
+\midrule
+1 & $(.60,.40)$ &
+Gaussian, identity, $\beta=(1,.5,-.7,1.2,-.4)$, $\sigma=1$ &
+Student-$t$, identity, $\beta=(-.5,-.8,.9,-1,.6)$, $\nu=4$, $\sigma=1$\\
+2 & $(.55,.45)$ &
+Gamma, log, $\beta=(-.6,.2,-.15,.15,-.1)$, $\kappa=30$ &
+Lognormal, identity on log-location, $\beta=(1,-.35,.3,-.25,.2)$, $\sigma=1$\\
+3 & $(.60,.40)$ &
+Poisson, log, $\beta=(2.5,.3,-.3,.3,-.3)$ &
+NB2, log, $\beta=(0,-.3,.3,-.3,.3)$, $\alpha=2$\\
+4 & $(.60,.40)$ &
+Poisson, log, $\beta=(2,.3,-.3,.3,-.3)$ &
+ZIP, log, $\beta=(1,-.3,.3,-.3,.3)$, $\vartheta=.6$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Gamma component is mean-shape parameterized, with variance $\mu^2/\kappa$. The lognormal systematic parameter is log-location, so its response mean is $\exp(\mu+\sigma^2/2)$. NB2 variance is $\mu+\alpha\mu^2$, and ZIP response mean is $(1-\vartheta)\mu$. Training covariates are standardized internally for optimization. Wald truth values are mapped into the same fitted coordinate system before coverage is evaluated.
+
+\subsection{Scenario A: family and component search}
+
+Scenario A uses $n\in\{500,1000,1500\}$ and searches $K=1,2,3$. The support-compatible family sets are
+\[
+\begin{array}{ll}
+\text{real-valued:}&\{\text{Gaussian},\text{Student-}t,\text{skew normal}\},\\
+\text{positive:}&\{\text{Gamma},\text{lognormal},\text{inverse Gaussian}\},\\
+\text{counts:}&\{\text{Poisson},\text{NB2},\text{ZIP}\}.
+\end{array}
+\]
+The beam width is 10, each candidate receives two starts, the maximum is 100 expectation-maximization (EM) or GEM iterations, and the relative tolerance is $10^{-4}$. Real-valued responses use quantile starts, positive responses use response-cluster generalized linear model (GLM) starts, and the frozen count run uses seeded random starts. The best converged candidate is selected by unpenalized BIC. Held-out prediction is average test log likelihood.
+
+The simulation engine fits ordered family assignments because a family assigned to a response-guided initial component can reach a different local mode from its permuted assignment. Structural comparisons canonicalize the family multiset, so Gaussian--Student-$t$ and Student-$t$--Gaussian have the same structural label. Stored top-ten candidate-fit lists retain the ordered assignments and are therefore computational leaderboards rather than ten unique statistical family multisets. In the application figures, family multisets are explicitly collapsed and only the best fit per unique tuple is shown.
+
+Strict recovery requires the selected canonical multiset to equal the generating multiset. Table~\ref{supp:tab:equivalence} gives the additional declared equivalences. They reflect limiting behavior only and do not assert equality at finite interior parameter values.
+
+\begin{table}[t]
+\centering
+\caption{Prespecified equivalence rules used only for the Scenario A summary.}
+\label{supp:tab:equivalence}
+\small
+\begin{tabular}{ll}
+\toprule
+Generating multiset & Multisets counted as equivalent\\
+\midrule
+Gaussian, Student-$t$ & Gaussian--Student-$t$; Student-$t$--Student-$t$\\
+Gamma, lognormal & Gamma--lognormal only\\
+Poisson, NB2 & Poisson--NB2; NB2--NB2\\
+Poisson, ZIP & Poisson--ZIP; ZIP--ZIP\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{supp:tab:criterion-agreement} supplements the recovery table in the article. Agreement is defined by canonical family multiset and component number, not by equality of fitted coefficients. The rate remains well below one even when family recovery is nearly perfect.
+
+\begin{table}[t]
+\centering
+\caption{Probability that the BIC-selected family multiset is also the held-out log-score winner. Each entry uses 100 replications.}
+\label{supp:tab:criterion-agreement}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Generating tuple & $n=500$ & $n=1000$ & $n=1500$\\
+\midrule
+Gaussian--Student-$t$ & .23 & .27 & .26\\
+Gamma--lognormal & .47 & .57 & .61\\
+Poisson--NB2 & .42 & .69 & .72\\
+Poisson--ZIP & .29 & .23 & .18\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The case-study directories retain top-ten BIC and prediction tables for the first seeded replication of every example and sample size. Across replications, the strict or equivalent generating tuple appears among the top ten candidate fits with the frequencies reported in the main article. The stored lists are useful optimization diagnostics, while the top-one canonical family rate is the primary structural endpoint.
+
+\subsection{Scenario B: sparse component regressions}
+
+Scenario B fixes the true two-family tuple, sets $n=1000$ and $p=20$, and makes the first four slopes active in each component. Fifteen trailing slopes are zero. Table~\ref{supp:tab:sparse-beta} gives the complete vectors.
+
+\begin{table}[t]
+\centering
+\caption{Scenario B regression coefficients. The notation $\mathbf 0_{15}$ denotes 15 trailing zeros.}
+\label{supp:tab:sparse-beta}
+\small
+\begin{tabular}{cll}
+\toprule
+Example & Component 1 & Component 2\\
+\midrule
+1 & $(1,.8,-.6,1.2,-.5,\mathbf0_{15})$ &
+$(-.8,-1,.9,-1.2,.7,\mathbf0_{15})$\\
+2 & $(-.6,.2,-.15,.15,-.1,\mathbf0_{15})$ &
+$(1,-.35,.3,-.25,.2,\mathbf0_{15})$\\
+4 & $(2,.4,-.3,.6,-.25,\mathbf0_{15})$ &
+$(1,-.5,.45,-.6,.35,\mathbf0_{15})$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The lasso and elastic-net paths use
+\[
+ \lambda\in\{0.25,0.5,1,2,5,10,20,50\};
+\]
+elastic-net mixing is 0.5. Within each penalty class, the BIC-minimizing path member is evaluated. A slope is selected when its absolute fitted value exceeds $10^{-4}$. The true-positive rate (TPR) and false-positive rate (FPR) are computed componentwise and averaged; the false-discovery rate (FDR) uses the pooled selected slopes. The true total number of active slopes is eight, whereas the unpenalized fit selects nearly all 38 candidate slopes.
+
+\subsection{Scenario C: fixed-model inference}
+
+Scenario C fixes $K$, the family tuple, and the full coefficient support. Its truth vector contains the free mixing logit, both regression vectors on the standardized fitting scale, and every nuisance parameter. Coverage, bias, parameter root mean squared error (RMSE), mean standard error (SE), and interval length are averaged over these free coordinates after deterministic family-aware label alignment.
+
+Gaussian--Student-$t$ and Poisson--ZIP use 100 replications at each of $n=500,1000,1500$, two starts, 100 iterations, and tolerance $10^{-4}$. Both analytical Louis and central numerical-Hessian information are computed. Their mean SE and coverage agree to the displayed precision, and all information calculations succeed.
+
+The final Gamma--lognormal run uses 500 replications at
+$n\in\{500,1000,1500,2500\}$, up to 50 $K$-means--GLM starts plus a quantile--GLM start, 250 iterations, and tolerance $10^{-4}$. At $n=500$, 495 of 500 fitted allocations match the direct regression pattern and five match the crossed local pattern; at every larger sample size all 500 are direct. Table~\ref{supp:tab:gamma-inference} gives the complete summary, including Monte Carlo standard errors (MCSEs) of coverage.
+
+\begin{table}[t]
+\centering
+\caption{Intensive Gamma--lognormal analytical-Louis inference over 500 replications per sample size. MAB denotes mean absolute bias and MCSE denotes Monte Carlo standard error.}
+\label{supp:tab:gamma-inference}
+\small
+\begin{tabular}{rrrrrrr}
+\toprule
+$n$ & MAB & Parameter RMSE & Mean SE & Coverage & Coverage MCSE & Interval length\\
+\midrule
+500  & .04202 & .10644 & .04367 & .9368 & .00509 & .17118\\
+1000 & .02465 & .03796 & .03101 & .9442 & .00327 & .12156\\
+1500 & .02044 & .03147 & .02533 & .9456 & .00313 & .09929\\
+2500 & .01590 & .02451 & .01959 & .9426 & .00338 & .07680\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The repaired run replaces the earlier low-start Gamma--lognormal inference summary. No results from the superseded run are pooled into Table~\ref{supp:tab:gamma-inference} or Figure 1 of the article.
+
+\subsection{Monte Carlo indexing and frozen outputs}
+
+For replication index $r$ and example $e$, the base seed is $100r+e$. The principal structural and sparsity output is
+\[
+ \texttt{experiments/simulations/paper\_outputs/}\allowbreak
+ \texttt{v4\_positive\_repaired\_20260624\_b/}.
+\]
+The intensive positive-support inference output is
+\[
+ \texttt{paper\_outputs/v7\_gamma\_lognormal\_full\_inference\_20260817/}.
+\]
+Each directory includes run metadata, raw or checkpoint-level results, and processed summaries. The deterministic freezing script extracts the publication-facing subset from these directories into \path{experiments/paper_figures/csda_data/}. That compact tracked snapshot, rather than older similarly named result directories, defines the numerical record used by the article figures and tables.
+
+\section{Application protocols and additional results}
+\label{supp:applications}
+
+Both applications use the same sequence: five 80/20 splits, an exhaustive full-data family leaderboard, a common penalty grid, an active-component admissibility gate, an unpenalized active-set refit, conditional analytical Louis diagnostics, and 500 bootstrap repetitions of screening, tuning, support selection, and refitting with the selected family tuple fixed. This section reports the details omitted from the main article.
+
+\subsection{Common fitting and validation rules}
+
+All covariate transformations that depend on data are fitted on the training portion of a split. The penalty grid is
+\[
+ \lambda\in\{0,0.1,0.25,0.5,1,2,5,10,20\}.
+\]
+Each leaderboard task uses $K$-means--GLM and quantile--GLM initialization, a coefficient activity threshold of $10^{-5}$, and two starts for its active-set refit. The publication candidate must converge, have finite family-correct predictions, and retain at least one slope in every component. BIC is calculated from the unpenalized likelihood on the selected active sets. Prediction uses held-out average log likelihood, RMSE, and mean absolute error (MAE). No test response contributes to model selection.
+
+Table~\ref{supp:tab:split-contrasts} gives the exact values plotted in Figure 4 of the article. Within each split, it compares the best admissible non-identical candidate with the best admissible identical-family candidate having $K>1$. A positive difference favors the non-identical candidate:
+\[
+ \Delta_{\mathrm{BIC}}=\mathrm{BIC}_{\mathrm{ident}}-\mathrm{BIC}_{\mathrm{nonident}},
+\]
+\[
+ \Delta_{\log}=\overline\ell_{\mathrm{test,nonident}}
+ -\overline\ell_{\mathrm{test,ident}},\qquad
+ \Delta_{\mathrm{RMSE}}=\mathrm{RMSE}_{\mathrm{ident}}
+ -\mathrm{RMSE}_{\mathrm{nonident}}.
+\]
+
+\begin{table}[t]
+\centering
+\caption{Exact five-split contrasts between the best admissible non-identical and identical-family mixtures. Positive entries favor the non-identical model.}
+\label{supp:tab:split-contrasts}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Dataset & Split & $\Delta_{\mathrm{BIC}}$ & $\Delta_{\log}$ & $\Delta_{\mathrm{RMSE}}$\\
+\midrule
+Parkinson & 0 & 190.110 & -.289570 & -.003571\\
+ & 1 & -6.447 & -.012628 & -.001702\\
+ & 2 & 26.110 & .034886 & -.002037\\
+ & 3 & 26.794 & -.030856 & -.000596\\
+ & 4 & -14.102 & -.309067 & -.037604\\
+RAND & 0 & -3.356 & .000158 & 1.595519\\
+ & 1 & 22.134 & .002424 & -.013505\\
+ & 2 & 10.877 & -.001740 & -.017235\\
+ & 3 & 20.037 & -.006318 & -.023995\\
+ & 4 & 21.887 & -.002059 & -.002709\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Parkinson's telemonitoring}
+
+The University of California, Irvine (UCI) Parkinson's telemonitoring data contain 5875 recordings from 42 participants \citep{uci2009parkinsons,tsanas2010parkinsons}. The response is $\log(\text{total UPDRS})$, where UPDRS denotes the Unified Parkinson's Disease Rating Scale; before transformation, total UPDRS ranges from 7.0 to 55.0, with mean 29.0 and median 27.6. The predictors are age, sex, test time, jitter and shimmer summaries, noise-to-harmonics ratio (NHR), harmonics-to-noise ratio (HNR), recurrence period density entropy (RPDE), detrended fluctuation analysis (DFA), and pitch period entropy (PPE). In the feature labels, RAP denotes relative average perturbation, PPQ5 the five-point period perturbation quotient, and APQ an amplitude perturbation quotient. Jitter:DDP and Shimmer:DDA are removed because they are exact scalar transforms of retained variables.
+
+The split unit and bootstrap unit are the participant. The fitted likelihood is a working-independence conditional likelihood over recordings; it contains no random effect and does not model within-participant serial correlation. Grouped validation and resampling prevent participant leakage but do not change that likelihood assumption.
+
+Gaussian, Student-$t$, and skew-normal families with $K=1,2,3$ give 19 family multisets. Crossing these with nine penalties and two initializations gives 342 tasks per split. All 1710 split tasks and all 342 full-data tasks converge. Table~\ref{supp:tab:park-leaderboard} is the unique-family full-data leaderboard used for Figure 3.
+
+\begin{table}[t]
+\centering
+\caption{Parkinson full-data top-ten unique family multisets under the active-component gate. SN denotes skew normal and $\Delta$ is BIC minus 3088.044.}
+\label{supp:tab:park-leaderboard}
+\small
+\begin{tabular}{rlrrr}
+\toprule
+Rank & Family multiset & $\lambda$ & BIC & Active slopes\\
+\midrule
+1 & G+G+$t$ & 10 & 3088.044 & 17/15/13\\
+2 & G+$t$+$t$ & 20 & 3093.621 & 12/17/14\\
+3 & G+$t$+SN & 5 & 3109.350 & 17/14/17\\
+4 & $t$+SN+SN & 20 & 3112.663 & 16/11/17\\
+5 & $t$+$t$+$t$ & 5 & 3120.142 & 17/14/17\\
+6 & $t$+$t$+SN & .25 & 3123.308 & 17/17/17\\
+7 & G+G+G & .25 & 3617.557 & 17/17/17\\
+8 & SN+SN+SN & 5 & 3646.762 & 17/17/17\\
+9 & G+G+SN & 20 & 3727.432 & 12/16/17\\
+10 & G+SN+SN & 20 & 3735.946 & 17/16/12\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The selected active-set refit has log likelihood $-1309.703$, BIC 3088.044, and weights $(.3278,.2694,.4028)$. Its first Gaussian component retains all 17 slopes; the second omits Shimmer(dB) and PPE; the Student-$t$ component omits Jitter:PPQ5, Shimmer(dB), Shimmer:APQ3, and Shimmer:APQ5. The Student-$t$ transformation estimate is $\log(\nu-2)=-13.971$, so $\widehat\nu$ is numerically indistinguishable from 2 at the reported precision.
+
+The conditional analytical Louis matrix has dimension and rank 54, minimum eigenvalue $2.84\times10^{-5}$, and condition number $7.44\times10^{10}$. Every family contribution uses an analytical derivative. These diagnostics establish that the computed matrix is invertible, not that fixed-interior Wald theory is credible at the observed degrees-of-freedom safeguard.
+
+All 500 participant bootstraps complete. Equal-family Gaussian components are aligned by the minimum-distance assignment before summaries are formed. The selected penalty distribution is shown in Table~\ref{supp:tab:lambda-bootstrap}. Weight intervals are
+\[
+ \pi_1:(.144,.701),\qquad \pi_2:(.062,.570),\qquad
+ \pi_3:(.099,.618).
+\]
+The minimum, median, and maximum selection frequencies among full-fit active slopes are $(.912,.982,1.000)$, $(.850,.958,1.000)$, and $(.960,.994,1.000)$ in components 1--3. Hence the few zero entries in the full fit are not robust component-specific exclusions.
+
+\subsection{RAND non-physician visits}
+
+The RAND analysis retains the earliest record for each of 5912 participants to form independent baseline rows \citep{deb2002health,cameron2005microeconometrics}. The response is the number of face-to-face non-physician visits. Its quartiles are all zero, its mean is 0.537, its standard deviation is 3.141, its maximum is 106, and its zero proportion is 0.829.
+
+Fifty candidate slopes represent age, sex, child status, family size, physical limitation, chronic disease burden, mental and general health measures, race, education, coinsurance, plan, site, study year, and related insurance indicators. Predictor screening is repeated within every training split and bootstrap sample. Poisson, NB2, ZIP, and ZINB families with $K=1,2,3$ give 34 multisets. Crossing with nine penalties and two initializations gives 612 tasks per split. All 3060 split tasks and all 612 full-data tasks converge.
+
+Table~\ref{supp:tab:rand-leaderboard} gives the unique-family leaderboard. The common-start Poisson--NB2 fit is used for fair ranking. After selection, an expanded multistart refit of that same support improves the log likelihood from $-3809.763$ to $-3805.177$ and BIC from 7949.545 to 7940.374. It has weights $(.8651,.1349)$ and NB2 dispersion $\widehat\alpha=5.269$.
+
+\begin{table}[t]
+\centering
+\caption{RAND full-data top-ten unique family multisets under the active-component gate. P denotes Poisson and $\Delta$ is BIC minus 7949.545.}
+\label{supp:tab:rand-leaderboard}
+\small
+\begin{tabular}{rlrrr}
+\toprule
+Rank & Family multiset & $\lambda$ & BIC & Active slopes\\
+\midrule
+1 & P+NB2 & 20 & 7949.545 & 24/10\\
+2 & P+ZINB & 20 & 7959.193 & 24/10\\
+3 & ZINB+ZINB & 20 & 7966.659 & 24/10\\
+4 & NB2+ZIP & 20 & 7967.817 & 10/25\\
+5 & NB2+NB2 & 20 & 7971.380 & 27/8\\
+6 & ZIP+ZINB & 20 & 7976.229 & 25/10\\
+7 & NB2+ZINB & 20 & 8000.359 & 29/10\\
+8 & P+ZIP+ZINB & 20 & 8007.785 & 24/4/9\\
+9 & P+P+ZINB & 20 & 8012.223 & 25/3/10\\
+10 & P+ZINB+ZINB & 20 & 8024.282 & 24/5/5\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Poisson active set is
+\[
+\begin{split}
+\{&\text{xage, child, disea, black, fmde, coins, logc, mhi, plan\_16, site\_3,}\\
+ &\text{female, site\_4, year\_3, hlthf, hlthp, plan\_15, year\_5, educdec,}\\
+ &\text{plan\_2, plan\_17, plan\_7, year\_4, time, idp}\},
+\end{split}
+\]
+and the NB2 active set is
+\[
+ \{\text{child, physlm, disea, num, black, plan\_11, mdeoff, coins, site\_5, site\_4}\}.
+\]
+These are selected associations in latent components, not causal effects. The conditional Louis matrix has dimension and rank 38, minimum eigenvalue $7.73\times10^{-5}$, and condition number $2.94\times10^7$; both component blocks are analytical.
+
+All 500 ordinary nonparametric bootstrap samples complete. The percentile intervals are
+\[
+ \pi_{\mathrm{NB2}}:(.136,.204),\qquad
+ \alpha_{\mathrm{NB2}}:(3.448,7.240).
+\]
+The Poisson and NB2 active-count medians are 29 and 15, with interquartile ranges 27--32 and 12--17. Table~\ref{supp:tab:stable-rand} lists full-fit active variables with selection frequency at least .85.
+
+\begin{table}[t]
+\centering
+\caption{RAND full-fit active slopes with bootstrap selection frequency at least .85.}
+\label{supp:tab:stable-rand}
+\small
+\begin{tabular}{llr}
+\toprule
+Component & Variable & Selection frequency\\
+\midrule
+Poisson & xage & 1.000\\
+ & year\_5 & .996\\
+ & site\_4 & .994\\
+ & site\_3 & .992\\
+ & female & .988\\
+ & child & .910\\
+ & fmde & .890\\
+ & disea & .882\\
+ & black & .878\\
+ & year\_3 & .870\\
+NB2 & child & .988\\
+ & physlm & .934\\
+ & black & .912\\
+ & site\_5 & .870\\
+ & disea & .858\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Bootstrap tuning and common interpretation}
+
+Table~\ref{supp:tab:lambda-bootstrap} exposes tuning variability rather than reporting only the full-data value. Parkinson's resamples spread across the entire prespecified grid; RAND concentrates at the grid maximum. The latter is a declared grid-edge sensitivity. The grid is not extended after observing this result because doing so would change the prespecified analysis and could mechanically favor sparser BIC fits.
+
+\begin{table}[t]
+\centering
+\caption{Penalty selected within the 500 complete-pipeline bootstrap samples. Entries are count (frequency).}
+\label{supp:tab:lambda-bootstrap}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Dataset & 0 & .1 & .25 & .5 & 1 & 2 & 5 & 10 & 20\\
+\midrule
+Parkinson & 54 (.108) & 25 (.050) & 30 (.060) & 30 (.060) &
+31 (.062) & 36 (.072) & 50 (.100) & 89 (.178) & 155 (.310)\\
+RAND & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 3 (.006) & 497 (.994)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For both datasets, the bootstrap fixes the family tuple selected after the split and full-data evidence has been reviewed. It therefore measures conditional family-tuple uncertainty while propagating screening, tuning, support, refitting, resampling, and label-alignment variation. A bootstrap that repeats the full family and $K$ search would target a broader post-selection law and would require substantially more computation.
+
+\section{Reproducibility manifest}
+\label{supp:reproducibility}
+
+The repository at \url{https://github.com/samyajoypal/mixglm} contains the implementation, experiment drivers, frozen processed outputs, and submission sources. This section identifies the canonical files so that similarly named exploratory directories are not mistaken for the final numerical record.
+
+\subsection{Software implementation}
+
+The installable package is defined by \texttt{pyproject.toml} and requires Python 3.9 or later, NumPy, and SciPy. The main implementation boundaries are:
+\[
+\begin{array}{ll}
+\texttt{src/mixglm/families/} & \text{component log densities and simulation},\\
+\texttt{src/mixglm/links/} & \text{link and inverse-link maps},\\
+\texttt{src/mixglm/penalties/} & \text{lasso, ridge, and elastic net},\\
+\texttt{src/mixglm/em/} & \text{E-step, initialization, and M-step logic},\\
+\texttt{src/mixglm/model/} & \text{mixture model and fitted-result interface},\\
+\texttt{src/mixglm/selection/} & \text{candidate spaces, BIC, and search},\\
+\texttt{src/mixglm/inference/} & \text{Louis assembly and analytical blocks}.
+\end{array}
+\]
+The direct analytical validation command is
+\begin{quote}
+\small\texttt{.venv/bin/python experiments/simulations/validate\_louis\_derivatives.py}.
+\end{quote}
+Its publication summary is \texttt{experiments/simulations/louis\_validation\_summary.csv}.
+
+\subsection{Canonical experiment drivers}
+
+The principal simulation driver and its cluster submission wrappers are
+\begin{description}
+\item[Driver] \path{experiments/simulations/master_run.py}
+\item[Search] \path{experiments/simulations/submit_master.sh}
+\item[Inference] \path{experiments/simulations/submit_gamma_lognormal_inference.sh}
+\end{description}
+Application screening and final inference use
+\begin{description}
+\item[Screening] \path{experiments/real_data/run_targeted_hpc_screen.py}
+\item[Parkinson] \path{experiments/real_data/run_final_inference.py}
+\item[RAND] \path{experiments/real_data/run_rand_final_inference.py}
+\end{description}
+The corresponding wrappers are \path{experiments/real_data/submit_parkinsons_grouped.sh}, \path{experiments/real_data/submit_parkinsons_final_inference.sh}, and \path{experiments/real_data/submit_rand_final_inference.sh}. Each final output directory contains a \path{run_metadata.json} file recording the grid, starts, iteration limits, seeds, bootstrap size, and selection rule.
+
+\subsection{Frozen table and figure inputs}
+
+Table~\ref{supp:tab:artifact-manifest} maps each article figure to a compact source label. All files are under \path{experiments/paper_figures/csda_data/}. Figure PDFs are deterministic postprocessing products; the plotting script does not refit or reselect a model.
+
+\begin{table}[t]
+\centering
+\caption{Canonical inputs for the sequential article figures.}
+\label{supp:tab:artifact-manifest}
+\small
+\begin{tabular}{cll}
+\toprule
+Figure & Content & Source label\\
+\midrule
+1 & Simulation recovery, agreement, RMSE, coverage & A, B\\
+2 & Sparse support rates & C\\
+3 & Unique-family application leaderboards & D\\
+4 & Five-split application contrasts & E\\
+5 & Bootstrap support frequency & F\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The source labels denote the following filenames in that directory:
+\begin{description}
+\item[A] \path{simulation_family_search.csv}
+\item[B] \path{simulation_inference.csv}
+\item[C] \path{simulation_sparse.csv}
+\item[D] \path{application_leaderboards.csv}
+\item[E] \path{application_split_contrasts.csv}
+\item[F] \path{bootstrap_selection_frequencies.csv}
+\end{description}
+The same directory also contains split class winners and means, full-data class winners, bootstrap parameter and tuning summaries, final model parameters, Louis diagnostics, run metadata, and the sixteen derivative-validation results. From completed raw experiments, the exact snapshot is rebuilt by
+\begin{quote}
+\small\texttt{.venv/bin/python experiments/paper\_figures/freeze\_csda\_results.py}.
+\end{quote}
+
+The figure command, run from the repository root, is
+\begin{quote}
+\small
+\texttt{.venv/bin/python experiments/paper\_figures/make\_csda\_figures.py}\\
+\texttt{\hspace*{2em}--outdir csda\_submission}.
+\end{quote}
+It writes \texttt{fig1.pdf} through \texttt{fig5.pdf} and no other manuscript assets.
+
+\subsection{Standalone compilation}
+
+The Editorial Manager bundle is flat. It contains
+\texttt{main.tex}, \texttt{supplementary.tex}, \texttt{references.bib},
+\texttt{fig1.pdf}--\texttt{fig5.pdf}, \texttt{cas-sc.cls},
+\texttt{cas-common.sty}, \texttt{cas-model2-names.bst}, and the six flat \texttt{cas-*.jpeg} interface thumbnails required by the class. Neither TeX source uses \verb|\input| or a nested figure path. From that directory, the two documents compile independently with
+\begin{quote}
+\small
+\texttt{latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex}\\
+\texttt{latexmk -pdf -interaction=nonstopmode -halt-on-error supplementary.tex}.
+\end{quote}
+The generated auxiliary files and PDFs are build products and need not be uploaded as source if Editorial Manager compiles the submission. The compiled PDFs remain useful for the authors' pre-upload visual check.
+
+\subsection{Reproduction levels}
+
+Three reproduction levels are distinguished. First, LaTeX compilation requires only the flat submission files. Second, figure and table reproduction reads the frozen comma-separated-value (CSV) and JavaScript Object Notation (JSON) artifacts and takes minutes without fitting. Third, a full stochastic reproduction reruns thousands of mixture fits and the two 500-sample bootstraps on a cluster. The article's numerical values are tied to the frozen second-level record; a fresh stochastic run should agree within Monte Carlo error, not bit for bit across numerical libraries and parallel schedules.
+
+\bibliographystyle{cas-model2-names}
+\bibliography{references}
+
+\end{document}

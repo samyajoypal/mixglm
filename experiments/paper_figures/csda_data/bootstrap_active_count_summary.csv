@@ -1,0 +1,6 @@
+dataset,component,n_valid,q25,median,q75
+parkinsons,0,500,16,17,17
+parkinsons,1,500,16,17,17
+parkinsons,2,500,17,17,17
+rand,0,500,27,29,32
+rand,1,500,12,15,17

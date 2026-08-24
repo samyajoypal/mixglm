@@ -1,0 +1,25 @@
+{
+  "parkinsons": {
+    "condition_number": 74430841707.2048,
+    "derivative_sources": {
+      "gaussian:analytic": 11750,
+      "student_t:analytic": 5875
+    },
+    "dimension": 54,
+    "information_valid_for_wald": true,
+    "max_eigenvalue": 2110525.9077365506,
+    "min_eigenvalue": 2.8355529231264642e-05,
+    "rank": 54,
+    "warning": ""
+  },
+  "rand": {
+    "condition_number": 29421340.179191805,
+    "derivative_sources": {
+      "nb2:analytic": 5912,
+      "poisson:analytic": 5912
+    },
+    "dimension": 38,
+    "min_eigenvalue": 7.728839322359282e-05,
+    "rank": 38
+  }
+}

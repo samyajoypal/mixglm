@@ -1,0 +1,98 @@
+{
+  "parkinsons": {
+    "active_threshold": 1e-05,
+    "bootstrap_families_requested": "auto",
+    "bootstrap_families_selected": [
+      "gaussian",
+      "gaussian",
+      "student_t"
+    ],
+    "bootstrap_reps": 500,
+    "bootstrap_resampling_unit": "participant_group",
+    "bootstrap_scope": "screening, lambda, and support reselected within every replicate",
+    "bootstrap_starts": 1,
+    "dataset": "parkinsons_log",
+    "final_refit_batches": 3,
+    "final_refit_starts": 5,
+    "inits": [
+      "kmeans_glm",
+      "quantile_glm"
+    ],
+    "lambdas": [
+      0.0,
+      0.1,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      5.0,
+      10.0,
+      20.0
+    ],
+    "leaderboard_families": [
+      "gaussian",
+      "student_t",
+      "skew_normal"
+    ],
+    "leaderboard_k_max": 3,
+    "leaderboard_starts": 2,
+    "max_iter": 220,
+    "min_active_per_component": 1,
+    "n": 5875,
+    "n_groups": 42,
+    "n_jobs": 16,
+    "p": 18,
+    "p_screen": 50,
+    "refit_starts": 2,
+    "seed": 20260817,
+    "selected_leaderboard_bic": 3088.0438785738293,
+    "selected_leaderboard_loglik": -1309.703483133581,
+    "selected_leaderboard_task": "parkinsons_log_K3_gaussian-gaussian-student_t_L10.0_kmeans_glm",
+    "selection_rule": "minimum active-set refit BIC subject to the active-component gate",
+    "tol": 0.001
+  },
+  "rand": {
+    "active_threshold": 1e-05,
+    "bootstrap_families": [
+      "poisson",
+      "nb2"
+    ],
+    "bootstrap_reps": 500,
+    "bootstrap_scope": "family fixed after repeated-split validation; screening, lambda, and support reselected",
+    "bootstrap_starts": 1,
+    "dataset": "randhealth_notmdvis_baseline",
+    "inits": [
+      "kmeans_glm",
+      "quantile_glm"
+    ],
+    "lambdas": [
+      0.0,
+      0.1,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      5.0,
+      10.0,
+      20.0
+    ],
+    "leaderboard_families": [
+      "poisson",
+      "nb2",
+      "zip",
+      "zinb"
+    ],
+    "leaderboard_k_max": 3,
+    "leaderboard_starts": 2,
+    "max_iter": 200,
+    "min_active_per_component": 1,
+    "n": 5912,
+    "n_jobs": 16,
+    "p": 51,
+    "p_screen": 50,
+    "refit_starts": 2,
+    "seed": 20260703,
+    "selection_rule": "minimum active-set refit BIC subject to the active-component gate",
+    "tol": 0.001
+  }
+}
