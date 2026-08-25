@@ -1,8 +1,8 @@
 # Frozen CSDA Result Record
 
-These files are the compact numerical record used by `csda_submission/main.tex`,
-`csda_submission/supplementary.tex`, and `make_csda_figures.py`. They contain
-only processed summaries, not exploratory runs or model checkpoints.
+These files are the compact numerical record for the reported simulation and
+application analyses and for `make_csda_figures.py`. They contain only
+processed summaries, not exploratory runs or model checkpoints.
 
 Regenerate them from the completed experiment directories with:
 
@@ -14,7 +14,7 @@ Then regenerate the five article figures with:
 
 ```bash
 .venv/bin/python experiments/paper_figures/make_csda_figures.py \
-  --outdir csda_submission
+  --outdir paper_outputs/csda_figures
 ```
 
 The freezing script applies the declared convergence, finite-prediction, and

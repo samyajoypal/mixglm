@@ -19,6 +19,17 @@ supplementary_material.pdf
 paper_source/manuscript_draft.pdf
 paper_source/supplementary_material.pdf
 
+# Local manuscript and journal-submission files
+/csda_submission/
+/csda_editorial_manager_source.zip
+/paper_source/
+/manuscript_draft.tex
+/supplementary_material.tex
+/appendix_louis_mstep.tex
+/methods_theory_rewrite.tex
+/CSDA_SUBMISSION_CHECKLIST.md
+/paper_outputs/
+
 # Local logs and scratch artifacts
 logs/
 scratch/

@@ -344,7 +344,9 @@ def figure_bootstrap_support(root: Path, outdir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--outdir", type=Path, default=Path("csda_submission"))
+    parser.add_argument(
+        "--outdir", type=Path, default=Path("paper_outputs/csda_figures")
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()

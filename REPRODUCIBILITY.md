@@ -1,30 +1,13 @@
 # Reproducibility Guide
 
 This repository contains the Python implementation, experiment drivers,
-compact frozen results, and standalone Elsevier source for the CSDA manuscript.
-
-## Submission Sources
-
-The flat Editorial Manager bundle is in `csda_submission/`. Its source files are:
-
-- `main.tex`
-- `supplementary.tex`
-- `references.bib`
-- `fig1.pdf` through `fig5.pdf`
-- `cas-sc.cls`, `cas-common.sty`, `cas-model2-names.bst`, and the flat `cas-*.jpeg` class assets
-
-Neither TeX document uses `\input` or a nested figure path. Compile independently:
-
-```bash
-cd csda_submission
-latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
-latexmk -pdf -interaction=nonstopmode -halt-on-error supplementary.tex
-```
+compact frozen results, and figure-generation tools for the computational
+study.
 
 ## Canonical Numerical Record
 
 The small tracked files in `experiments/paper_figures/csda_data/` are the
-publication-facing numerical record. They include:
+frozen numerical record for the reported analyses. They include:
 
 - family recovery, top-ten inclusion, criterion agreement, sparsity, and inference summaries;
 - unique-family full-data leaderboards and five-split class winners;
@@ -44,7 +27,7 @@ The raw sources used by the freezing script are the final directories named in
 the script. They include the repaired simulation run dated `20260817`, the
 Parkinson grouped and final runs dated `20260820`, and the RAND lower-penalty
 split and final runs. Older similarly named exploratory directories are not
-part of the manuscript record.
+part of the final analysis record.
 
 Both application searches use `LassoPenalty` for every positive tuning value,
 equivalent to a penalty mixing parameter of one. The same lambda is applied to
@@ -54,16 +37,15 @@ candidate counts.
 
 ## Figures
 
-Generate the five sequential article figures from the compact snapshot:
+Generate the five sequential figures from the compact snapshot:
 
 ```bash
 .venv/bin/python experiments/paper_figures/make_csda_figures.py \
-  --outdir csda_submission
+  --outdir paper_outputs/csda_figures
 ```
 
 The command writes only `fig1.pdf` through `fig5.pdf`. It performs no fitting or
-selection. Pixel-level comparison against the submitted figures is part of the
-release audit.
+selection.
 
 ## Analytical Louis Validation
 
@@ -93,8 +75,8 @@ bootstrap size, and selection rule in `run_metadata.json`.
 
 Three reproduction levels should be distinguished:
 
-1. LaTeX compilation uses only the flat submission files.
-2. Table and figure reproduction uses the compact frozen snapshot and takes minutes.
+1. Analytical-derivative validation runs locally from the implementation.
+2. Numerical-summary and figure reproduction uses the compact frozen snapshot and takes minutes.
 3. Full stochastic reproduction reruns thousands of fits and two 500-sample bootstraps on a cluster.
 
 A fresh stochastic run should agree within Monte Carlo error; it need not be
