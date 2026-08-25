@@ -245,7 +245,18 @@ def application_tables(root: Path, outdir: Path) -> None:
                 }
             )
 
-        metadata[dataset] = json.loads((full_dir / "run_metadata.json").read_text())
+        run_metadata = json.loads((full_dir / "run_metadata.json").read_text())
+        # Completed legacy runs predate explicit penalty metadata, although the
+        # application drivers have always constructed one common lasso path.
+        run_metadata.update(
+            {
+                "penalty_type": "lasso",
+                "penalty_mixing_alpha": 1.0,
+                "lambda_shared_across_components": True,
+                "lambda_zero_is_unpenalized": True,
+            }
+        )
+        metadata[dataset] = run_metadata
         models[dataset] = json.loads((full_dir / "post_lasso_model.json").read_text())
         louis[dataset] = json.loads(
             (full_dir / "post_lasso_louis_diagnostics.json").read_text()

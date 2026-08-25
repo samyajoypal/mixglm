@@ -931,11 +931,11 @@ Each directory includes run metadata, raw or checkpoint-level results, and proce
 \section{Application protocols and additional results}
 \label{supp:applications}
 
-Both applications use the same sequence: five 80/20 splits, an exhaustive full-data family leaderboard, a common penalty grid, an active-component admissibility gate, an unpenalized active-set refit, conditional analytical Louis diagnostics, and 500 bootstrap repetitions of screening, tuning, support selection, and refitting with the selected family tuple fixed. This section reports the details omitted from the main article.
+Both applications use the same sequence: five 80/20 splits, an exhaustive full-data family leaderboard, a common lasso path, an active-component admissibility gate, an unpenalized active-set refit, conditional analytical Louis diagnostics, and 500 bootstrap repetitions of screening, tuning, support selection, and refitting with the selected family tuple fixed. This section reports the details omitted from the main article.
 
 \subsection{Common fitting and validation rules}
 
-All covariate transformations that depend on data are fitted on the training portion of a split. The penalty grid is
+All covariate transformations that depend on data are fitted on the training portion of a split. The application penalty is exclusively lasso: for every $\lambda>0$, the penalty mixing parameter in equation (2) of the article is $\alpha_k=1$ for every component, so the penalized term is $\lambda\lVert\beta_{k,-0}\rVert_1$. The same $\lambda$ is used across components. Ridge and elastic net are not searched. The lasso-path grid, including its unpenalized $\lambda=0$ endpoint, is
 \[
  \lambda\in\{0,0.1,0.25,0.5,1,2,5,10,20\}.
 \]
@@ -981,7 +981,7 @@ The University of California, Irvine (UCI) Parkinson's telemonitoring data conta
 
 The split unit and bootstrap unit are the participant. The fitted likelihood is a working-independence conditional likelihood over recordings; it contains no random effect and does not model within-participant serial correlation. Grouped validation and resampling prevent participant leakage but do not change that likelihood assumption.
 
-Gaussian, Student-$t$, and skew-normal families with $K=1,2,3$ give 19 family multisets. Crossing these with nine penalties and two initializations gives 342 tasks per split. All 1710 split tasks and all 342 full-data tasks converge. Table~\ref{supp:tab:park-leaderboard} is the unique-family full-data leaderboard used for Figure 3.
+Gaussian, Student-$t$, and skew-normal families with $K=1,2,3$ give 19 family multisets. Crossing these with nine lasso-path values, including the unpenalized endpoint, and two initializations gives $19\times9\times2=342$ tasks per split. All 1710 split tasks and all 342 full-data tasks converge. Table~\ref{supp:tab:park-leaderboard} is the unique-family full-data leaderboard used for Figure 3.
 
 \begin{table}[t]
 \centering
@@ -1021,7 +1021,7 @@ The minimum, median, and maximum selection frequencies among full-fit active slo
 
 The RAND analysis retains the earliest record for each of 5912 participants to form independent baseline rows \citep{deb2002health,cameron2005microeconometrics}. The response is the number of face-to-face non-physician visits. Its quartiles are all zero, its mean is 0.537, its standard deviation is 3.141, its maximum is 106, and its zero proportion is 0.829.
 
-Fifty candidate slopes represent age, sex, child status, family size, physical limitation, chronic disease burden, mental and general health measures, race, education, coinsurance, plan, site, study year, and related insurance indicators. Predictor screening is repeated within every training split and bootstrap sample. Poisson, NB2, ZIP, and ZINB families with $K=1,2,3$ give 34 multisets. Crossing with nine penalties and two initializations gives 612 tasks per split. All 3060 split tasks and all 612 full-data tasks converge.
+Fifty candidate slopes represent age, sex, child status, family size, physical limitation, chronic disease burden, mental and general health measures, race, education, coinsurance, plan, site, study year, and related insurance indicators. Predictor screening is repeated within every training split and bootstrap sample. Poisson, NB2, ZIP, and ZINB families with $K=1,2,3$ give 34 multisets. Crossing with nine lasso-path values, including the unpenalized endpoint, and two initializations gives $34\times9\times2=612$ tasks per split. All 3060 split tasks and all 612 full-data tasks converge.
 
 Table~\ref{supp:tab:rand-leaderboard} gives the unique-family leaderboard. The common-start Poisson--NB2 fit is used for fair ranking. After selection, an expanded multistart refit of that same support improves the log likelihood from $-3809.763$ to $-3805.177$ and BIC from 7949.545 to 7940.374. It has weights $(.8651,.1349)$ and NB2 dispersion $\widehat\alpha=5.269$.
 

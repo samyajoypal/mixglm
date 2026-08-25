@@ -46,6 +46,12 @@ Parkinson grouped and final runs dated `20260820`, and the RAND lower-penalty
 split and final runs. Older similarly named exploratory directories are not
 part of the manuscript record.
 
+Both application searches use `LassoPenalty` for every positive tuning value,
+equivalent to a penalty mixing parameter of one. The same lambda is applied to
+all components, and lambda zero is the unpenalized endpoint. Ridge and elastic
+net are implemented in the package but are not part of the Parkinson or RAND
+candidate counts.
+
 ## Figures
 
 Generate the five sequential article figures from the compact snapshot:
