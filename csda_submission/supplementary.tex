@@ -401,9 +401,9 @@ whereas $(a_m-a_{m_0})\log n\to\infty$ whenever $a_m>a_{m_0}$. Hence every large
 \section{Analytical Louis derivations and validation}
 \label{supp:derivatives}
 
-The main article lists the final derivative blocks. This section supplies the underlying one-observation log densities and the differentiation steps that are most easily obscured by transformed nuisance coordinates. The derivations cover Gaussian, Student-$t$, Poisson, negative binomial with quadratic variance (NB2), Gamma, exponential, lognormal, inverse Gaussian, Bernoulli, geometric, beta, zero-inflated Poisson (ZIP), zero-inflated negative binomial (ZINB), and skew-normal components.
+Appendix A of the main article is the sole catalogue of the final analytical score and Hessian blocks used by the implementation. Repeating those blocks here would obscure the distinction between a formula reference and its derivation. This section instead gives the primitive log likelihoods and reusable differentiation identities from which every block follows, with additional detail for transformed Student-$t$, skew-normal, and zero-inflated coordinates. The final subsection validates the resulting implementation independently by finite differences.
 
-\subsection{Generic transformations}
+\subsection{Coordinate transformations}
 
 For $\ell(\mu,\gamma)=\log f(y;\mu,\gamma)$, write
 \[
@@ -437,63 +437,43 @@ For an inverse link $\mu=h(\eta)$, the identity, log, and logit cases have
 \]
 Substitution in Proposition~\ref{supp:prop-chain} maps every block below into regression coordinates.
 
-\subsection{Continuous and positive families}
+\subsection{Direct likelihood derivatives}
 
-These families illustrate two recurring patterns: location-scale differentiation and log transformation of a positive shape or scale parameter.
+The calculations in this subsection establish the blocks that require only direct differentiation. Terms depending on $y$ alone may be omitted because they vanish from every parameter derivative.
 
-\paragraph{Gaussian.}
-With $v=e^s$, $r=y-\mu$, and constants in $y$ suppressed,
+\paragraph{Gaussian, lognormal, and inverse Gaussian.}
+For the Gaussian model, with $v=e^s$ and $r=y-\mu$, the relevant log likelihood is
 \[
- \ell=-\frac12s-\frac{r^2}{2v}.
+ \ell_{\mathrm G}=-\frac12s-\frac12e^{-s}r^2.
 \]
-Since $\partial_\mu r=-1$ and $\partial_s(v^{-1})=-v^{-1}$,
+Thus the complete calculation uses only
 \[
- a_\mu=r/v,\quad b_{\mu\mu}=-1/v,\quad
- a_s=-1/2+r^2/(2v),
+ \partial_\mu r=-1,\qquad
+ \partial_s e^{-s}=-e^{-s}.
 \]
+For the lognormal model, replace $r$ by $\log y-\mu$ and use
 \[
- B_{ss}=-r^2/(2v),\qquad b_{\mu s}=-r/v.
+ \ell_{\mathrm{LN}}=-\log y-a-\frac12e^{-2a}r^2,
+ \qquad \partial_a e^{-2a}=-2e^{-2a}.
 \]
+The data-Jacobian term $-\log y$ is parameter-free. These identities explain both the Gaussian/lognormal correspondence and the factor-of-two difference between their log-variance and log-scale curvatures.
 
-\paragraph{Student-$t$.}
-For $\sigma=e^a$, $\nu=2+e^b$, $u=(y-\mu)^2/\sigma^2$, and
-$q=1+u/\nu$,
+For the inverse Gaussian, let $\lambda=e^a$ and
 \[
- \ell=\log\Gamma\!\left(\frac{\nu+1}{2}\right)
- -\log\Gamma\!\left(\frac{\nu}{2}\right)
- -\frac12\log(\nu\pi)-a-\frac{\nu+1}{2}\log q.
+ A(\mu)=\frac{(y-\mu)^2}{2\mu^2y}.
 \]
-Writing $r=y-\mu$ and $D=\nu\sigma^2+r^2$, direct differentiation in $\mu$ and $a$ gives
+Its log likelihood is
 \[
- a_\mu=\frac{(\nu+1)r}{D},\qquad
- b_{\mu\mu}=\frac{(\nu+1)(r^2-\nu\sigma^2)}{D^2},
+ \ell_{\mathrm{IG}}
+ =\frac12\{a-\log(2\pi)-3\log y\}-e^aA(\mu),
 \]
+where
 \[
- a_a=-1+\frac{(\nu+1)r^2}{D},\quad
- B_{aa}=-\frac{2(\nu+1)r^2\nu\sigma^2}{D^2},\quad
- b_{\mu a}=-\frac{2(\nu+1)r\nu\sigma^2}{D^2}.
+ A'(\mu)=-\frac{y-\mu}{\mu^3},\qquad
+ A''(\mu)=\frac{3y-2\mu}{\mu^4}.
 \]
-Differentiating first in the natural coordinate $\nu$ yields
-\[
- L_\nu=\frac12\psi\!\left(\frac{\nu+1}{2}\right)
- -\frac12\psi\!\left(\frac{\nu}{2}\right)-\frac{1}{2\nu}
- -\frac12\log q+\frac{(\nu+1)u}{2\nu(\nu+u)}.
-\]
-If $M=\nu(\nu+u)$ and $N=u(\nu+1)/2$, the quotient rule gives
-\[
- L_{\nu\nu}=\frac14\psi_1\!\left(\frac{\nu+1}{2}\right)
- -\frac14\psi_1\!\left(\frac{\nu}{2}\right)+\frac{1}{2\nu^2}
- +\frac{u}{2M}+\frac{uM/2-N(2\nu+u)}{M^2}.
-\]
-Applying \eqref{supp:eq:log-transform} with $w=e^b=\nu-2$ gives
-\[
- a_b=wL_\nu,\qquad B_{bb}=wL_\nu+w^2L_{\nu\nu}.
-\]
-Differentiating the location and scale scores with respect to $\nu$ and multiplying by $w$ gives
-\[
- b_{\mu b}=\frac{wr(r^2-\sigma^2)}{D^2},\qquad
- B_{ab}=\frac{wr^2(r^2-\sigma^2)}{D^2}.
-\]
+Two differentiations of these three displayed likelihoods, followed by
+\eqref{supp:eq:log-transform}, give their corresponding blocks in Appendix A.
 
 \paragraph{Gamma and exponential.}
 For a mean-shape Gamma law with $\kappa=e^a$,
@@ -501,88 +481,14 @@ For a mean-shape Gamma law with $\kappa=e^a$,
  \ell=(\kappa-1)\log y-\kappa y/\mu-\log\Gamma(\kappa)
  -\kappa\log\mu+\kappa\log\kappa.
 \]
-Thus
+The identities
 \[
- a_\mu=\kappa(y-\mu)/\mu^2,\qquad
- b_{\mu\mu}=\kappa(\mu-2y)/\mu^3.
+ \frac{\mathrm d}{\mathrm d\kappa}\log\Gamma(\kappa)=\psi(\kappa),
+ \qquad
+ \frac{\mathrm d}{\mathrm d\kappa}\psi(\kappa)=\psi_1(\kappa)
 \]
-The natural shape score and curvature are
-\[
- L_\kappa=\log y-y/\mu-\psi(\kappa)-\log\mu+\log\kappa+1,\qquad
- L_{\kappa\kappa}=-\psi_1(\kappa)+1/\kappa.
-\]
-Equation~\eqref{supp:eq:log-transform} gives
-\[
- a_a=\kappa L_\kappa,\quad
- B_{aa}=\kappa L_\kappa+\kappa^2L_{\kappa\kappa},\quad
- b_{\mu a}=a_\mu.
-\]
-Setting $\kappa=1$ and dropping the shape coordinate gives the exponential log density
-$\ell=-\log\mu-y/\mu$ and
-\[
- a_\mu=(y-\mu)/\mu^2,\qquad b_{\mu\mu}=(\mu-2y)/\mu^3.
-\]
-
-\paragraph{Lognormal.}
-With log-location $\mu$, $\sigma=e^a$, and $r=\log y-\mu$,
-\[
- \ell=-\log y-a-\frac{r^2}{2\sigma^2}+\text{constant}.
-\]
-This is the Gaussian calculation applied to $\log y$, with a log-standard-deviation rather than log-variance coordinate:
-\[
- a_\mu=r/\sigma^2,\quad b_{\mu\mu}=-1/\sigma^2,\quad
- a_a=-1+r^2/\sigma^2,
-\]
-\[
- B_{aa}=-2r^2/\sigma^2,\qquad b_{\mu a}=-2r/\sigma^2.
-\]
-
-\paragraph{Inverse Gaussian.}
-For mean $\mu$ and shape $\lambda=e^a$,
-\[
- \ell=\frac12\{\log\lambda-\log(2\pi)-3\log y\}
- -\lambda\frac{(y-\mu)^2}{2\mu^2y}.
-\]
-Let $A=(y-\mu)^2/(2\mu^2y)$. Differentiation gives
-\[
- a_\mu=\lambda(y-\mu)/\mu^3,\qquad
- b_{\mu\mu}=\lambda(2\mu-3y)/\mu^4.
-\]
-Because $\partial_\lambda\ell=1/(2\lambda)-A$, the log-shape transformation gives
-\[
- a_a=1/2-\lambda A,\qquad B_{aa}=-\lambda A,\qquad b_{\mu a}=a_\mu.
-\]
-
-\paragraph{Skew normal.}
-For location $\mu$, scale $\omega=e^a$, shape $\alpha$, and
-$z=(y-\mu)/\omega$,
-\[
- \ell=\log2-a+\log\varphi(z)+\log\Phi(\alpha z).
-\]
-Define $M(t)=\varphi(t)/\Phi(t)$, $t=\alpha z$, and
-$M'(t)=-M(t)\{t+M(t)\}$. Then
-\[
- \ell_z=-z+\alpha M(t),\quad
- \ell_{zz}=-1+\alpha^2M'(t),\quad
- \ell_{z\alpha}=M(t)+\alpha zM'(t).
-\]
-Using $\partial_\mu z=-1/\omega$ and $\partial_a z=-z$ yields
-\[
- a_\mu=-\ell_z/\omega,\quad b_{\mu\mu}=\ell_{zz}/\omega^2,\quad
- a_a=-1-z\ell_z,\quad a_\alpha=zM(t),
-\]
-\[
- B_{aa}=z\ell_z+z^2\ell_{zz},\quad
- B_{\alpha\alpha}=z^2M'(t),\quad B_{a\alpha}=-z\ell_{z\alpha},
-\]
-\[
- b_{\mu a}=(\ell_z+z\ell_{zz})/\omega,\qquad
- b_{\mu\alpha}=-\ell_{z\alpha}/\omega.
-\]
-
-\subsection{Binary, bounded, and count families}
-
-For mean-parameterized exponential-family components, differentiation in $\mu$ is short; NB2 and beta require transformed dispersion or precision coordinates.
+and the log-coordinate rule \eqref{supp:eq:log-transform} generate the shape derivatives and the $\mu$--shape cross derivative. Setting $\kappa=1$ and deleting the shape coordinate reduces the kernel to
+$\ell_{\mathrm{Exp}}=-\log\mu-y/\mu$, proving the exponential block without a separate calculation.
 
 \paragraph{Bernoulli, Poisson, and geometric.}
 Their log densities, up to terms free of $\mu$, are
@@ -593,19 +499,7 @@ Their log densities, up to terms free of $\mu$, are
 \[
  \ell_{\mathrm{Geo}}=y\log\mu-(y+1)\log(1+\mu).
 \]
-Two differentiations give
-\[
- a_\mu^{\mathrm{Ber}}=\frac y\mu-\frac{1-y}{1-\mu},\qquad
- b_{\mu\mu}^{\mathrm{Ber}}=-\frac y{\mu^2}-\frac{1-y}{(1-\mu)^2},
-\]
-\[
- a_\mu^{\mathrm{Poi}}=y/\mu-1,\qquad
- b_{\mu\mu}^{\mathrm{Poi}}=-y/\mu^2,
-\]
-\[
- a_\mu^{\mathrm{Geo}}=y/\mu-(y+1)/(1+\mu),\qquad
- b_{\mu\mu}^{\mathrm{Geo}}=-y/\mu^2+(y+1)/(1+\mu)^2.
-\]
+The first and second $\mu$ derivatives of these scalar expressions are exactly the three no-nuisance blocks reported in Appendix A.
 
 \paragraph{NB2.}
 Let $\rho=\log\alpha$, $r=\alpha^{-1}=e^{-\rho}$, and $A=r+\mu$. The log mass is
@@ -613,23 +507,17 @@ Let $\rho=\log\alpha$, $r=\alpha^{-1}=e^{-\rho}$, and $A=r+\mu$. The log mass is
  \ell=\log\Gamma(y+r)-\log\Gamma(r)-\log\Gamma(y+1)
  +r\log r+y\log\mu-(r+y)\log A.
 \]
-Holding $r$ fixed gives
+Holding $r$ fixed gives the mean derivatives. Differentiating in $r$ uses the same digamma and trigamma identities as the Gamma calculation. Finally,
 \[
- a_\mu=y/\mu-(r+y)/A,\qquad
- b_{\mu\mu}=-y/\mu^2+(r+y)/A^2.
+ \partial_\rho r=-r,\qquad \partial_{\rho\rho}^2r=r,
 \]
-The score and curvature in $r$ are
+and hence
 \[
- L_r=\psi(y+r)-\psi(r)+\log r+1-\log A-(r+y)/A,
+ \partial_\rho\ell=-r\partial_r\ell,\qquad
+ \partial_{\rho\rho}^2\ell=r\partial_r\ell+r^2\partial_{rr}^2\ell,
+ \qquad \partial_{\mu\rho}^2\ell=-r\partial_{\mu r}^2\ell.
 \]
-\[
- L_{rr}=\psi_1(y+r)-\psi_1(r)+1/r-1/A-(\mu-y)/A^2.
-\]
-Since $\partial_\rho r=-r$, the chain rule gives
-\[
- a_\rho=-rL_r,\qquad B_{\rho\rho}=rL_r+r^2L_{rr},\qquad
- b_{\mu\rho}=r(\mu-y)/A^2.
-\]
+These identities produce the transformed dispersion score, curvature, and cross derivative in Appendix A.
 
 \paragraph{Beta.}
 Let $\phi=e^a$, $A=\mu\phi$, and $B=(1-\mu)\phi$. The log density is
@@ -637,97 +525,130 @@ Let $\phi=e^a$, $A=\mu\phi$, and $B=(1-\mu)\phi$. The log density is
  \ell=\log\Gamma(\phi)-\log\Gamma(A)-\log\Gamma(B)
  +(A-1)\log y+(B-1)\log(1-y).
 \]
-Differentiating in $\mu$ gives
+Here
 \[
- G=-\psi(A)+\psi(B)+\log y-\log(1-y),\qquad a_\mu=\phi G,
+ \partial_\mu A=\phi,\quad \partial_\mu B=-\phi,\quad
+ \partial_\phi A=\mu,\quad \partial_\phi B=1-\mu.
 \]
-\[
- b_{\mu\mu}=-\phi^2\{\psi_1(A)+\psi_1(B)\}.
-\]
-The natural precision score and curvature are
-\[
- L_\phi=\psi(\phi)-\mu\psi(A)-(1-\mu)\psi(B)
- +\mu\log y+(1-\mu)\log(1-y),
-\]
-\[
- L_{\phi\phi}=\psi_1(\phi)-\mu^2\psi_1(A)
- -(1-\mu)^2\psi_1(B).
-\]
-Equation~\eqref{supp:eq:log-transform} and differentiation of $\phi G$ give
-\[
- a_a=\phi L_\phi,\qquad
- B_{aa}=\phi L_\phi+\phi^2L_{\phi\phi},
-\]
-\[
- b_{\mu a}=\phi G+\phi^2\{-\mu\psi_1(A)+(1-\mu)\psi_1(B)\}.
-\]
+Applying the gamma-function identities before the log-precision transformation gives all mean, precision, and cross derivatives. This order of differentiation is useful because it exposes the two trigamma contributions to the mean curvature and prevents omission of the mean--precision cross term.
 
-\subsection{Zero-inflated count families}
+\subsection{Student-\texorpdfstring{$t$}{t} and skew-normal calculations}
 
-The zero and positive branches must be differentiated separately. This is also why the validation suite checks both branches.
+The two remaining continuous families benefit from differentiating through standardized intermediate variables rather than expanding their final blocks directly.
 
-\paragraph{ZIP.}
-Let $\zeta=\operatorname{logit}(\vartheta)$ and
-$\dot\vartheta=\vartheta(1-\vartheta)$. If $y>0$,
+\paragraph{Student-$t$.}
+Let $\sigma=e^a$, $\nu=2+e^b$, $w=e^b$, $r=y-\mu$,
+$u=r^2/\sigma^2$, $q=1+u/\nu$, and $D=\nu\sigma^2+r^2$. Write
 \[
- \ell=\log(1-\vartheta)+y\log\mu-\mu-\log(y!),
+ C(\nu)=\log\Gamma\!\left(\frac{\nu+1}{2}\right)
+ -\log\Gamma\!\left(\frac{\nu}{2}\right)-\frac12\log(\nu\pi).
 \]
-so the Poisson block is unchanged and
+Then
 \[
- a_\zeta=-\vartheta,\qquad
- B_{\zeta\zeta}=-\dot\vartheta,\qquad b_{\mu\zeta}=0.
+ \ell=C(\nu)-a-\frac{\nu+1}{2}L,\qquad L=\log q.
 \]
-If $y=0$, define
+The derivatives needed to avoid any quotient-rule ambiguity are
 \[
- e=e^{-\mu},\quad A=\vartheta+(1-\vartheta)e,\quad
- B=(1-\vartheta)e,\quad C=\dot\vartheta(1-e).
+\begin{array}{lll}
+ L_\mu=-2r/D,&
+ L_a=-2r^2/D,&
+ L_\nu=-u/\{\nu(\nu+u)\},\\[2pt]
+ L_{\mu\mu}=2(\nu\sigma^2-r^2)/D^2,&
+ L_{\mu a}=4r\nu\sigma^2/D^2,&
+ L_{aa}=4r^2\nu\sigma^2/D^2,\\[2pt]
+ L_{\mu\nu}=2r\sigma^2/D^2,&
+ L_{a\nu}=2r^2\sigma^2/D^2,&
+ L_{\nu\nu}=u(2\nu+u)/\{\nu^2(\nu+u)^2\}.
+\end{array}
 \]
-Because $A_\mu=-B$, $A_\zeta=C$, and
-$C_\zeta=\dot\vartheta(1-2\vartheta)(1-e)$,
-differentiating $\ell=\log A$ gives
+The normalizing term satisfies
 \[
- a_\mu=-B/A,\qquad b_{\mu\mu}=B\vartheta/A^2,
+ C'(\nu)=\frac12\psi\!\left(\frac{\nu+1}{2}\right)
+ -\frac12\psi\!\left(\frac{\nu}{2}\right)-\frac{1}{2\nu},
 \]
 \[
- a_\zeta=C/A,\qquad
- B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,
+ C''(\nu)=\frac14\psi_1\!\left(\frac{\nu+1}{2}\right)
+ -\frac14\psi_1\!\left(\frac{\nu}{2}\right)+\frac{1}{2\nu^2}.
 \]
+Consequently,
 \[
- b_{\mu\zeta}=(\dot\vartheta eA+CB)/A^2.
+ \ell_\nu=C'(\nu)-\frac12L-\frac{\nu+1}{2}L_\nu,\qquad
+ \ell_{\nu\nu}=C''(\nu)-L_\nu-\frac{\nu+1}{2}L_{\nu\nu},
 \]
+and for $j\in\{\mu,a\}$,
+\[
+ \ell_{j\nu}=-\frac12L_j-\frac{\nu+1}{2}L_{j\nu}.
+\]
+The first two rows of $L$ derivatives give the location--scale block directly. Since $\partial_b\nu=\partial_{bb}^2\nu=w$, the chain rule gives the transformed degrees-of-freedom entries in Appendix A, including both cross derivatives.
 
-\paragraph{ZINB.}
-For $y>0$, the log mass is $\log(1-\vartheta)$ plus the NB2 log mass, so the NB2 block and the positive-branch inflation entries from ZIP apply. For $y=0$, let
+\paragraph{Skew normal.}
+For $\omega=e^a$, $z=(y-\mu)/\omega$, and $t=\alpha z$,
 \[
- p_0=\{r/(r+\mu)\}^r,\qquad A=\vartheta+(1-\vartheta)p_0.
+ \ell=\log2-a-\frac12z^2+\log\Phi(t)+\text{constant}.
 \]
-For $j,\ell\in\{\mu,\rho\}$, let
-$g_j=\partial_j\log p_0$ and
-$H_{j\ell}=\partial_{j\ell}^2\log p_0$. With $D=r+\mu$ and
-$L_{r0}=\log r+1-\log D-r/D$,
+If $M(t)=\varphi(t)/\Phi(t)$, quotient differentiation gives
 \[
- g_\mu=-r/D,\quad H_{\mu\mu}=r/D^2,\quad
- g_\rho=-rL_{r0},\quad H_{\mu\rho}=r\mu/D^2,
+ M'(t)=-M(t)\{t+M(t)\}.
 \]
+All required entries now follow from ordinary differentiation in $(z,\alpha)$ and the operators
 \[
- H_{\rho\rho}=rL_{r0}+r^2\{1/r-1/D-\mu/D^2\}.
+ \partial_\mu=-\omega^{-1}\partial_z,\qquad
+ \partial_a z=-z,\qquad \partial_\alpha t=z.
 \]
-Now
+In particular, differentiating $\partial_z\ell=-z+\alpha M(\alpha z)$ once with respect to $z$ and once with respect to $\alpha$ supplies the three primitive second derivatives. Applying the displayed operators, while retaining the explicit derivative of the term $-a$, yields the complete skew-normal block in Appendix A.
+
+\subsection{A generic zero-inflation derivation}
+
+ZIP and ZINB are most compactly derived together. Let a baseline count law have parameter vector $\xi$, zero probability $p_0(\xi)$, zero-score
+$g=\nabla_\xi\log p_0$, and zero-Hessian
+$H=\nabla_{\xi\xi}^2\log p_0$. Let
 \[
- A_j=(1-\vartheta)p_0g_j,\quad
- A_{j\ell}=(1-\vartheta)p_0(H_{j\ell}+g_jg_\ell),\quad
- A_{j\zeta}=-\dot\vartheta p_0g_j.
+ \vartheta=\{1+\exp(-\zeta)\}^{-1},\qquad
+ A=\vartheta+(1-\vartheta)p_0,\qquad
+ W=\frac{(1-\vartheta)p_0}{A}.
 \]
-Writing $C=\dot\vartheta(1-p_0)$ and
-$C_\zeta=\dot\vartheta(1-2\vartheta)(1-p_0)$, two applications of the quotient rule to $\log A$ give
+For a zero observation, $\ell_0=\log A$. Since
 \[
- a_j=A_j/A,\quad B_{j\ell}=(A_{j\ell}A-A_jA_\ell)/A^2,
+ \nabla_\xi A=(1-\vartheta)p_0g,\qquad
+ \nabla_{\xi\xi}^2A=(1-\vartheta)p_0(H+gg^\T),
 \]
+the quotient rule gives the generic baseline-coordinate result
+\begin{equation}
+ \nabla_\xi\ell_0=Wg,\qquad
+ \nabla_{\xi\xi}^2\ell_0=WH+W(1-W)gg^\T.
+ \label{supp:eq:generic-zero}
+\end{equation}
+Writing $\dot\vartheta=\vartheta(1-\vartheta)$,
 \[
- a_\zeta=C/A,\quad B_{\zeta\zeta}=(C_\zeta A-C^2)/A^2,\quad
- B_{j\zeta}=(A_{j\zeta}A-A_jC)/A^2.
+ C=\partial_\zeta A=\dot\vartheta(1-p_0),\qquad
+ C_\zeta=\dot\vartheta(1-2\vartheta)(1-p_0),
 \]
-These expressions include the $\mu$--$\rho$--$\zeta$ cross-blocks needed by Louis information; omitting them is not an analytical ZINB Hessian.
+and
+\[
+ \nabla_{\xi\zeta}^2A=-\dot\vartheta p_0g.
+\]
+Therefore
+\begin{equation}
+ \partial_\zeta\ell_0=C/A,\qquad
+ \partial_{\zeta\zeta}^2\ell_0=C_\zeta/A-(C/A)^2,
+ \label{supp:eq:generic-inflation}
+\end{equation}
+\[
+ \nabla_{\xi\zeta}^2\ell_0
+ =\frac{A\nabla_{\xi\zeta}^2A-C\nabla_\xi A}{A^2}.
+\]
+These vector formulas include every baseline--inflation cross derivative.
+
+For a positive count, the log likelihood is
+$\log(1-\vartheta)+\log f_{\mathrm{base}}(y;\xi)$, so the baseline block is unchanged, the cross block is zero, and two logit-coordinate derivatives of $\log(1-\vartheta)$ give the positive-branch inflation entries.
+
+ZIP follows from $\log p_0(\mu)=-\mu$. ZINB follows from
+\[
+ \log p_0(\mu,\rho)
+ =r\{\log r-\log(r+\mu)\},\qquad r=e^{-\rho}.
+\]
+Differentiating these scalar zero-probability expressions supplies $g$ and $H$ in \eqref{supp:eq:generic-zero}; substitution into
+\eqref{supp:eq:generic-inflation} gives exactly the zero-branch blocks reported in Appendix A. This derivation also explains why ZIP and ZINB must each be validated at both zero and positive counts.
 
 \subsection{Numerical implementation validation}
 
